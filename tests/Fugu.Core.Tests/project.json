@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1-*",
+  "dependencies": {
+    "Microsoft.NETCore.App": {
+      "version": "1.0.0-rc2-3002609",
+      "type": "platform"
+    },
+    "dotnet-test-xunit": "1.0.0-rc2-173384-19",
+    "xunit": "2.1.0",
+    "moq.netcore": "4.4.0-beta8",
+    "Fugu.Core": {
+      "target": "project"
+    }
+  },
+  "frameworks": {
+    "netcoreapp1.0": {
+      "imports": [ "dnxcore50", "portable-net45+win8" ]
+    }
+  },
+  "testRunner": "xunit"
+}
