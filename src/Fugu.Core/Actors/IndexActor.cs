@@ -11,45 +11,22 @@ namespace Fugu.Actors
     public class IndexActor : IIndexActor
     {
         private readonly MessageLoop _messageLoop = new MessageLoop();
-
-        private readonly ICompactionStrategy _compactionStrategy;
-        private readonly ICompactor _compactor;
         private readonly ISnapshotsActor _snapshotsActor;
-        private readonly IEvictionActor _evictionActor;
+        private readonly ICompactionActor _compactionActor;
 
         // Actor state: master index and associated clock vector
         private VectorClock _clock = new VectorClock();
         private Index _index = Index.Empty;
 
-        // Actor state: balance-related fields
-        private readonly List<Segment> _compactableSegments = new List<Segment>();
-        //private bool _isCompacting = false;
-
-        public IndexActor(
-            ICompactionStrategy compactionStrategy,
-            ICompactor compactor,
-            ISnapshotsActor snapshotsActor,
-            IEvictionActor evictionActor)
+        public IndexActor(ISnapshotsActor snapshotsActor, ICompactionActor compactionActor)
         {
-            Guard.NotNull(compactionStrategy, nameof(compactionStrategy));
-            Guard.NotNull(compactor, nameof(compactor));
             Guard.NotNull(snapshotsActor, nameof(snapshotsActor));
-            Guard.NotNull(evictionActor, nameof(evictionActor));
-
-            _compactionStrategy = compactionStrategy;
-            _compactor = compactor;
+            Guard.NotNull(compactionActor, nameof(compactionActor));
             _snapshotsActor = snapshotsActor;
-            _evictionActor = evictionActor;
+            _compactionActor = compactionActor;
         }
 
-        /// <summary>
-        /// Raised when the total capacity of compactable segments has changed due to a compaction.
-        /// </summary>
-        public event Action<long> CompactableCapacityChanged;
-
-        public event Action<IReadOnlyList<SegmentStats>> CompactableSegmentsChanged;
-
-        public async Task UpdateAsync(VectorClock clock, IEnumerable<KeyValuePair<byte[], IndexEntry>> updates)
+        public async Task MergeIndexUpdatesAsync(VectorClock clock, IEnumerable<KeyValuePair<byte[], IndexEntry>> updates)
         {
             Guard.NotNull(updates, nameof(updates));
 
@@ -57,60 +34,60 @@ namespace Fugu.Actors
 
             using (await _messageLoop)
             {
-                // Consolidate clock
                 _clock = VectorClock.Merge(_clock, clock);
 
-                // Apply updates, attempt to restore balance if necessary, then notify downstream actors
-                ProcessUpdatesAndEnsureBalance(updates);
-                continuation = _snapshotsActor.UpdateIndexAsync(_clock, _index);
+                var addedEntries = new List<IndexEntry>(updates.Select(kvp => kvp.Value));
+                var removedEntries = UpdateIndex(updates);
+                continuation = NotifyIndexChangedAsync(addedEntries, removedEntries);
             }
 
             await continuation;
         }
 
-        public async void RegisterCompactableSegment(Segment segment)
+        /// <summary>
+        /// Removes a set of keys from the index and notifies dependent actors of the change.
+        /// </summary>
+        /// <param name="keys">The keys to remove.</param>
+        /// <param name="maxGeneration">
+        /// The maximum generation that each key may be in to qualify for removal. If a given key is present
+        /// in the index, but is associated with a higher generation than indicated by this parameter, the key
+        /// will not be removed because it was modified in a way that the caller did not witness.
+        /// </param>
+        public async void RemoveEntries(IEnumerable<byte[]> keys, long maxGeneration)
         {
-            Guard.NotNull(segment, nameof(segment));
+            Guard.NotNull(keys, nameof(keys));
+            if (maxGeneration < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxGeneration));
+            }
 
             using (await _messageLoop)
             {
-                // TODO: delay adding the segment to the list until we can be sure that the index data is fully available.
-                // Edge case here is that a new segment is registered, but a compaction finishes (and triggers another
-                // rebalance that may pick up the newly added segment) before the final write results for this segment come
-                // through.
-                // Note that it may be sufficient to register the segment from the writer actor only AFTER the final index
-                // update for it has been triggered.
-                _compactableSegments.Add(segment);
+                var removedEntries = new List<IndexEntry>();
 
-                // Notify other actors
-                var segmentStats = _compactableSegments.Select(s => new SegmentStats(s.LiveBytes, s.DeadBytes)).ToArray();
-                CompactableSegmentsChanged?.Invoke(segmentStats);
+                foreach (var key in keys)
+                {
+                    IndexEntry existingEntry;
+                    if (_index.TryGetValue(key, out existingEntry) && existingEntry.Segment.MaxGeneration <= maxGeneration)
+                    {
+                        _index = _index.Remove(key);
+                        removedEntries.Add(existingEntry);
+                    }
+                }
+
+                // Make downstream actors aware of these changes
+                if (removedEntries.Count > 0)
+                {
+                    var task = NotifyIndexChangedAsync(new IndexEntry[0], removedEntries);
+                }
             }
         }
 
-        private void ProcessUpdatesAndEnsureBalance(IEnumerable<KeyValuePair<byte[], IndexEntry>> indexUpdates)
+        private IReadOnlyList<IndexEntry> UpdateIndex(IEnumerable<KeyValuePair<byte[], IndexEntry>> updates)
         {
-            UpdateIndexAndStats(indexUpdates);
-
-            // Check balance invariants if we're not currently waiting for the results of a previous compaction
-            //if (!_isCompacting)
-            //{
-            //    EvictEmptySegments();
-            //    Range compactionRange;
-            //    if (_compactionStrategy.TryGetCompactionRange(_compactableSegments, out compactionRange))
-            //    {
-            //        RunCompaction(compactionRange);
-            //    }
-            //}
-        }
-
-        private void UpdateIndexAndStats(IEnumerable<KeyValuePair<byte[], IndexEntry>> indexUpdates)
-        {
-            foreach (var update in indexUpdates)
+            var removedEntries = new List<IndexEntry>();
+            foreach (var update in updates)
             {
-                // Required either way
-                update.Value.Segment.AddLiveBytes(update.Value.Size);
-
                 IndexEntry existingEntry;
                 if (_index.TryGetValue(update.Key, out existingEntry))
                 {
@@ -118,18 +95,18 @@ namespace Fugu.Actors
                     // associated with a generation that's as recent or newer
                     if (update.Value.Segment.MaxGeneration >= existingEntry.Segment.MaxGeneration)
                     {
-                        existingEntry.Segment.MarkBytesAsDead(existingEntry.Size);
+                        removedEntries.Add(existingEntry);
                         _index = _index.SetItem(update.Key, update.Value);
                     }
                     else
                     {
-                        update.Value.Segment.MarkBytesAsDead(update.Value.Size);
+                        removedEntries.Add(update.Value);
                     }
                 }
                 else if (update.Value is IndexEntry.Tombstone)
                 {
                     // New entry is a tombstone, but the index doesn't contain an entry for that key
-                    update.Value.Segment.MarkBytesAsDead(update.Value.Size);
+                    removedEntries.Add(update.Value);
                 }
                 else
                 {
@@ -137,93 +114,16 @@ namespace Fugu.Actors
                     _index = _index.SetItem(update.Key, update.Value);
                 }
             }
+
+            return removedEntries;
         }
 
-        /// <summary>
-        /// Scans the list of compactable segments for segments whose live-data count has dropped to zero
-        /// and schedules them for eviction once they are no longer visible in any snapshot.
-        /// </summary>
-        private void EvictEmptySegments()
+        private Task NotifyIndexChangedAsync(
+            IReadOnlyList<IndexEntry> addedEntries,
+            IReadOnlyList<IndexEntry> removedEntries)
         {
-            long delta = 0;
-
-            for (int i = 0; i < _compactableSegments.Count; )
-            {
-                if (_compactableSegments[i].LiveBytes > 0)
-                {
-                    i++;
-                    continue;
-                }
-
-                delta -= _compactableSegments[i].Table.Capacity;
-
-                _evictionActor.ScheduleEviction(_clock, _compactableSegments[i]);
-                _compactableSegments.RemoveAt(i);
-            }
-
-            if (delta != 0)
-            {
-                CompactableCapacityChanged?.Invoke(delta);
-            }
+            _compactionActor.OnIndexUpdated(this, _clock, addedEntries, removedEntries, _index);
+            return _snapshotsActor.UpdateIndexAsync(_clock, _index);
         }
-
-        //private async void RunCompaction(Range compactionRange)
-        //{
-        //    try
-        //    {
-        //        _isCompacting = true;
-
-        //        // Input parameters for compaction
-        //        long minGeneration = _compactableSegments[compactionRange.Index].MinGeneration;
-        //        long maxGeneration = _compactableSegments[compactionRange.Index + compactionRange.Count - 1].MaxGeneration;
-        //        bool dropTombstones = compactionRange.Index == 0;
-
-        //        // Run the compaction asynchronously, this will likely take us off the message loop
-        //        var result = await _compactor.CompactAsync(_index, minGeneration, maxGeneration, dropTombstones);
-
-        //        // Re-enter the message loop so that we may apply the result
-        //        using (await _messageLoop)
-        //        {
-        //            _clock = new VectorClock(_clock.Modification, _clock.Compaction + 1);
-        //            _compactableSegments.Insert(compactionRange.Index, result.CompactedSegment);
-        //            CompactableCapacityChanged?.Invoke(result.CompactedSegment.Table.Capacity);
-
-        //            RemoveTombstones(result.DroppedTombstones, result.CompactedSegment.MaxGeneration);
-
-        //            // Reset flag here already so that it doesn't interfere with the balancing in ProcessUpdatesAsync
-        //            _isCompacting = false;
-
-        //            ProcessUpdatesAndEnsureBalance(result.IndexUpdates);
-        //            var continuation = _snapshotsActor.UpdateIndexAsync(_clock, _index);
-        //        }
-        //    }
-        //    finally
-        //    {
-        //        _isCompacting = false;
-        //    }
-        //}
-
-        /// <summary>
-        /// Removes tombstones from the index after they have disappeared in a compaction of the oldest
-        /// segments.
-        /// </summary>
-        /// <param name="keys">Keys of tombstones to remove from the index.</param>
-        /// <param name="maxGeneration">
-        /// Most recent generation included in compaction so that we can detect if the same key has been
-        /// modified concurrently, in which case we need to retain the new value.
-        /// </param>
-        //private void RemoveTombstones(IReadOnlyList<byte[]> keys, long maxGeneration)
-        //{
-        //    foreach (var tombstoneKey in keys)
-        //    {
-        //        IndexEntry existingTombstone;
-        //        if (_index.TryGetValue(tombstoneKey, out existingTombstone) &&
-        //            maxGeneration >= existingTombstone.Segment.MaxGeneration)
-        //        {
-        //            existingTombstone.Segment.MarkBytesAsDead(existingTombstone.Size);
-        //            _index = _index.Remove(tombstoneKey);
-        //        }
-        //    }
-        //}
     }
 }

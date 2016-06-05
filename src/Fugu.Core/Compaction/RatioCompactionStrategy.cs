@@ -15,7 +15,7 @@ namespace Fugu.Compaction
     /// </summary>
     public class RatioCompactionStrategy : ICompactionStrategy
     {
-        public bool TryGetCompactionRange(IReadOnlyList<Segment> segments, out Range compactionRange)
+        public bool TryGetCompactionRange(IReadOnlyList<SegmentStats> segments, out Range compactionRange)
         {
             compactionRange = default(Range);
             long totalLiveBytes = segments.Sum(s => s.LiveBytes);

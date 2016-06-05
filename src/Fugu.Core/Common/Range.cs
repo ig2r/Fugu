@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace Fugu.Common
 {
-    [DebuggerDisplay("{Index}, {Count}")]
+    [DebuggerDisplay("Index = {Index}, Count = {Count}")]
     public struct Range : IEquatable<Range>
     {
         public Range(int index, int count)

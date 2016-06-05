@@ -1,11 +1,10 @@
 ﻿using Fugu.Common;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace Fugu
 {
+    [DebuggerDisplay("MinGeneration = {MinGeneration}, MaxGeneration = {MaxGeneration}")]
     public class Segment
     {
         public Segment(long minGeneration, long maxGeneration, ITable table)
@@ -31,18 +30,6 @@ namespace Fugu
         public long MaxGeneration { get; }
         public ITable Table { get; }
 
-        public long LiveBytes { get; private set; } = 0;
-        public long DeadBytes { get; private set; } = 0;
-
-        public void AddLiveBytes(long count)
-        {
-            LiveBytes += count;
-        }
-
-        public void MarkBytesAsDead(long count)
-        {
-            LiveBytes -= count;
-            DeadBytes += count;
-        }
+        public SegmentStats Stats { get; } = new SegmentStats();
     }
 }

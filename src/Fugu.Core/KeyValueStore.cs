@@ -67,13 +67,12 @@ namespace Fugu
         {
             _evictionActor = new EvictionActor(_tableSet);
             _snapshotsActor = new SnapshotsActor();
-            _indexActor = new IndexActor(new RatioCompactionStrategy(), new Compactor(_tableSet), _snapshotsActor, _evictionActor);
-            _compactionActor = new CompactionActor();
-            _writerActor = new WriterActor(_tableSet, _indexActor);
+            _compactionActor = new CompactionActor(new RatioCompactionStrategy(), _tableSet, _evictionActor);
+            _indexActor = new IndexActor(_snapshotsActor, _compactionActor);
+            _writerActor = new WriterActor(_tableSet, _compactionActor, _indexActor);
             _mvccActor = new MvccActor(_writerActor);
 
-            _indexActor.CompactableCapacityChanged += _writerActor.OnCompactableCapacityChanged;
-            _indexActor.CompactableSegmentsChanged += _compactionActor.OnCompactableSegmentsChanged;
+            _compactionActor.CompactableBytesChanged += _writerActor.OnCompactableBytesChanged;
             _snapshotsActor.OldestLiveSnapshotChanged += _mvccActor.OnOldestLiveSnapshotChanged;
             _snapshotsActor.OldestLiveSnapshotChanged += _evictionActor.OnOldestLiveSnapshotChanged;
 

@@ -16,6 +16,6 @@ namespace Fugu.Compaction
         /// <param name="segments">An ordered list of segments that make up the hive.</param>
         /// <param name="compactionRange">The range of segments to compact if required by the strategy.</param>
         /// <returns>Value indicating whether a compaction should be performed.</returns>
-        bool TryGetCompactionRange(IReadOnlyList<Segment> segments, out Range compactionRange);
+        bool TryGetCompactionRange(IReadOnlyList<SegmentStats> segments, out Range compactionRange);
     }
 }
