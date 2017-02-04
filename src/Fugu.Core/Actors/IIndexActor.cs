@@ -1,13 +1,21 @@
-﻿using System.Collections.Generic;
+﻿using Fugu.Common;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Fugu.Common;
-using Fugu.Compaction;
 
 namespace Fugu.Actors
 {
+    /// <summary>
+    /// Instances of this actor maintain the store's master index.
+    /// </summary>
+    /// <remarks>
+    /// Implementing actors are expected to make the updated index available to downstream components, and may feed
+    /// into balancing strategies to ensure that the store does not grow beyond assigned limits.
+    /// </remarks>
     public interface IIndexActor
     {
-        Task MergeIndexUpdatesAsync(VectorClock clock, IEnumerable<KeyValuePair<byte[], IndexEntry>> updates);
-        void RemoveEntries(IEnumerable<byte[]> keys, long maxGeneration);
+        void UpdateIndex(
+            StateVector clock,
+            IReadOnlyList<KeyValuePair<byte[], IndexEntry>> indexUpdates,
+            TaskCompletionSource<VoidTaskResult> replyChannel);
     }
 }

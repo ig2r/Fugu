@@ -1,43 +1,68 @@
 ﻿using Fugu.Actors;
+using Fugu.Bootstrapping;
 using Fugu.Common;
-using Fugu.Compaction;
 using System;
 using System.Threading.Tasks;
 
 namespace Fugu
 {
-    public class KeyValueStore : IDisposable
+    public sealed class KeyValueStore : IDisposable
     {
-        private readonly ITableSet _tableSet;
+        private readonly IPartitioningActor _partitioningActor;
+        private readonly IWriterActor _writerActor;
+        private readonly IIndexActor _indexActor;
+        private readonly ISnapshotsActor _snapshotsActor;
 
-        private MvccActor _mvccActor;
-        private WriterActor _writerActor;
-        private IndexActor _indexActor;
-        private CompactionActor _compactionActor;
-        private SnapshotsActor _snapshotsActor;
-        private EvictionActor _evictionActor;
-
-        private KeyValueStore(ITableSet tableSet)
+        private KeyValueStore(
+            IPartitioningActor partitioningActor,
+            IWriterActor writerActor,
+            IIndexActor indexActor,
+            ISnapshotsActor snapshotsActor)
         {
-            _tableSet = tableSet;
+            Guard.NotNull(partitioningActor, nameof(partitioningActor));
+            Guard.NotNull(writerActor, nameof(writerActor));
+            Guard.NotNull(indexActor, nameof(indexActor));
+            Guard.NotNull(snapshotsActor, nameof(snapshotsActor));
+
+            _partitioningActor = partitioningActor;
+            _writerActor = writerActor;
+            _indexActor = indexActor;
+            _snapshotsActor = snapshotsActor;
         }
 
-        public static Task<KeyValueStore> CreateAsync(ITableSet tableSet)
+        public static async Task<KeyValueStore> CreateAsync(ITableSet tableSet)
         {
             Guard.NotNull(tableSet, nameof(tableSet));
-            var store = new KeyValueStore(tableSet);
-            return store.InitializeAsync();
+
+            // Create actors managing store state
+            var snapshotsActor = new SnapshotsActorShell(new SnapshotsActorCore());
+            var indexActor = new IndexActorShell(new IndexActorCore(snapshotsActor));
+
+            // Bootstrap store state from given table set
+            var bootstrapper = new Bootstrapper();
+            var result = await bootstrapper.RunAsync(tableSet, indexActor);
+
+            // Create actors accepting new writes to the store
+            var writerActor = new WriterActorShell(new WriterActorCore(indexActor));
+            var partitioningActor = new PartitioningActorShell(new PartitioningActorCore(tableSet, writerActor));
+
+            var store = new KeyValueStore(partitioningActor, writerActor, indexActor, snapshotsActor);
+            return store;
         }
 
         public Task<Snapshot> GetSnapshotAsync()
         {
-            return _snapshotsActor.GetSnapshotAsync();
+            var replyChannel = new TaskCompletionSource<Snapshot>();
+            _snapshotsActor.GetSnapshot(replyChannel);
+            return replyChannel.Task;
         }
 
-        public Task CommitAsync(WriteBatch batch)
+        public Task CommitAsync(WriteBatch writeBatch)
         {
-            Guard.NotNull(batch, nameof(batch));
-            return _mvccActor.CommitAsync(batch);
+            Guard.NotNull(writeBatch, nameof(writeBatch));
+            var replyChannel = new TaskCompletionSource<VoidTaskResult>();
+            _partitioningActor.Commit(writeBatch, replyChannel);
+            return replyChannel.Task;
         }
 
         #region IDisposable
@@ -50,7 +75,7 @@ namespace Fugu
             // GC.SuppressFinalize(this);
         }
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (disposing)
             {
@@ -62,21 +87,5 @@ namespace Fugu
         }
 
         #endregion
-
-        private Task<KeyValueStore> InitializeAsync()
-        {
-            _evictionActor = new EvictionActor(_tableSet);
-            _snapshotsActor = new SnapshotsActor();
-            _compactionActor = new CompactionActor(new RatioCompactionStrategy(), _tableSet, _evictionActor);
-            _indexActor = new IndexActor(_snapshotsActor, _compactionActor);
-            _writerActor = new WriterActor(_tableSet, _compactionActor, _indexActor);
-            _mvccActor = new MvccActor(_writerActor);
-
-            _compactionActor.CompactableBytesChanged += _writerActor.OnCompactableBytesChanged;
-            _snapshotsActor.OldestLiveSnapshotChanged += _mvccActor.OnOldestLiveSnapshotChanged;
-            _snapshotsActor.OldestLiveSnapshotChanged += _evictionActor.OnOldestLiveSnapshotChanged;
-
-            return Task.FromResult(this);
-        }
     }
 }

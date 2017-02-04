@@ -2,25 +2,34 @@
   "version": "0.0.1-*",
   "description": "Fugu is a lightweight, embeddable storage engine for .NET Core.",
   "authors": [ "Stephan Deininghaus" ],
+  "buildOptions": {
+    "allowUnsafe": true
+  },
   "packOptions": {
     "tags": [ "" ],
     "projectUrl": "https://github.com/ig2r/fugu",
     "licenseUrl": "https://github.com/ig2r/Fugu/blob/master/LICENSE"
   },
   "supports": {
-    "net46.app": { },
-    "uwp.10.0.app": { }
+    "net46.app": {},
+    "uwp.10.0.app": {}
   },
   "dependencies": {
-    "System.Buffers": "4.0.0-rc3-24102-00",
-    "System.IO.MemoryMappedFiles": "4.0.0-rc3-24102-00"
+    "System.Buffers": "4.0.0",
+    "System.IO.MemoryMappedFiles": "4.0.0",
+    "System.Threading.Tasks.Dataflow": "4.6.0"
   },
   "frameworks": {
     "netstandard1.3": {
       "dependencies": {
-        "NETStandard.Library": "1.5.0-rc3-24102-00"
+        "NETStandard.Library": "1.6.0"
       }
     },
-    "net46": { }
+    "net46": {
+      "dependencies": {
+        "System.Runtime": "4.0.20",
+        "System.Threading.Tasks": "4.0.10"
+      }
+    }
   }
 }

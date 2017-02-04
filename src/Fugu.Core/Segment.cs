@@ -29,7 +29,5 @@ namespace Fugu
         public long MinGeneration { get; }
         public long MaxGeneration { get; }
         public ITable Table { get; }
-
-        public SegmentStats Stats { get; } = new SegmentStats();
     }
 }

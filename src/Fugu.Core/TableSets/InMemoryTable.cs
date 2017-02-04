@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Fugu.TableSets
 {
-    public class InMemoryTable : IWritableTable, ITable
+    public class InMemoryTable : IOutputTable, ITable
     {
         private readonly byte[] _buffer;
 

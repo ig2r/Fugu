@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace Fugu
 {
-    public interface ITableFactory
+    public interface IOutputTable : ITable
     {
-        Task<IOutputTable> CreateTableAsync(long capacity);
+        Stream OutputStream { get; }
     }
 }

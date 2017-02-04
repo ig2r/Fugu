@@ -1,14 +1,12 @@
-﻿using System;
+﻿using Fugu.Common;
 using System.Threading.Tasks;
-using Fugu.Common;
+using Index = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
 namespace Fugu.Actors
 {
     public interface ISnapshotsActor
     {
-        event Action<VectorClock> OldestLiveSnapshotChanged;
-
-        Task<Snapshot> GetSnapshotAsync();
-        Task UpdateIndexAsync(VectorClock clock, CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index);
+        void UpdateIndex(StateVector clock, Index index, TaskCompletionSource<VoidTaskResult> replyChannel);
+        void GetSnapshot(TaskCompletionSource<Snapshot> replyChannel);
     }
 }

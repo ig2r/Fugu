@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Fugu.TableSets
 {
-    public class MemoryMappedTable : IWritableTable, IDisposable
+    public class MemoryMappedTable : IOutputTable, IDisposable
     {
         private readonly MemoryMappedFile _map;
 

@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Fugu
+namespace Fugu.Common
 {
-    public interface ITableFactory
+    public struct VoidTaskResult
     {
-        Task<IOutputTable> CreateTableAsync(long capacity);
     }
 }

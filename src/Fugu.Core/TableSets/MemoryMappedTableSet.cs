@@ -9,7 +9,7 @@ namespace Fugu.TableSets
     {
         private readonly HashSet<MemoryMappedTable> _tables = new HashSet<MemoryMappedTable>();
 
-        public Task<IWritableTable> CreateTableAsync(long capacity)
+        public Task<IOutputTable> CreateTableAsync(long capacity)
         {
             var table = new MemoryMappedTable(capacity);
             lock (_tables)
@@ -17,7 +17,7 @@ namespace Fugu.TableSets
                 _tables.Add(table);
             }
 
-            return Task.FromResult<IWritableTable>(table);
+            return Task.FromResult<IOutputTable>(table);
         }
 
         public Task<IEnumerable<ITable>> GetTablesAsync()
