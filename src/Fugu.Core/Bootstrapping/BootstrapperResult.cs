@@ -7,5 +7,11 @@ namespace Fugu.Bootstrapping
 {
     public class BootstrapperResult
     {
+        public BootstrapperResult(long maxGenerationLoaded)
+        {
+            MaxGenerationLoaded = maxGenerationLoaded;
+        }
+
+        public long MaxGenerationLoaded { get; }
     }
 }

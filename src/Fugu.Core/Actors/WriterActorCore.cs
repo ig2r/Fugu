@@ -11,14 +11,15 @@ namespace Fugu.Actors
         private readonly IIndexActor _indexActor;
 
         private StateVector _clock;
-        private long _generation = 0;
+        private long _generation;
         private Segment _segment;
         private TableWriter _tableWriter;
 
-        public WriterActorCore(IIndexActor indexActor)
+        public WriterActorCore(IIndexActor indexActor, long maxGeneration)
         {
             Guard.NotNull(indexActor, nameof(indexActor));
             _indexActor = indexActor;
+            _generation = maxGeneration;
         }
 
         #region IWriterActor

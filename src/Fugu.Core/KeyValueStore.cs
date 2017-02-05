@@ -43,7 +43,7 @@ namespace Fugu
             var result = await bootstrapper.RunAsync(tableSet, indexActor);
 
             // Create actors accepting new writes to the store
-            var writerActor = new WriterActorShell(new WriterActorCore(indexActor));
+            var writerActor = new WriterActorShell(new WriterActorCore(indexActor, result.MaxGenerationLoaded));
             var partitioningActor = new PartitioningActorShell(new PartitioningActorCore(tableSet, writerActor));
 
             var store = new KeyValueStore(partitioningActor, writerActor, indexActor, snapshotsActor);

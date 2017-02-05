@@ -1,6 +1,4 @@
 ﻿using Fugu.TableSets;
-using System;
-using System.Collections;
 using System.Text;
 using System.Threading.Tasks;
 using Xunit;
@@ -113,37 +111,5 @@ namespace Fugu.Tests
                 }
             }
         }
-
-        #region Durability tests
-
-        [Fact]
-        public async Task CommitAsync_PutSingleKey_KeyIsAvailableAfterRecreatingStore()
-        {
-            // Arrange:
-            var key1 = Encoding.UTF8.GetBytes("key:1");
-            var value1 = Encoding.UTF8.GetBytes("value:1");
-
-            var tableSet = new InMemoryTableSet();
-
-            using (var store = await KeyValueStore.CreateAsync(tableSet))
-            {
-                var batch = new WriteBatch();
-                batch.Put(key1, value1);
-                await store.CommitAsync(batch);
-            }
-
-            // Act:
-            using (var store = await KeyValueStore.CreateAsync(tableSet))
-            {
-                // Assert:
-                using (var snapshot = await store.GetSnapshotAsync())
-                {
-                    var retrieved = await snapshot.TryGetValueAsync(key1);
-                    Assert.Equal<byte>(value1, retrieved);
-                }
-            }
-        }
-
-        #endregion
     }
 }

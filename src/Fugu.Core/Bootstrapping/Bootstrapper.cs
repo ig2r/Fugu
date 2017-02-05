@@ -26,9 +26,13 @@ namespace Fugu.Bootstrapping
             var loadStrategy = new SegmentLoadStrategy();
             var tableLoader = new SegmentLoader(new TableParser(), indexActor);
 
-            await loadStrategy.RunAsync(availableSegments, tableLoader);
+            var loadedSegments = await loadStrategy.RunAsync(availableSegments, tableLoader);
 
-            return new BootstrapperResult();
+            var maxGenerationLoaded = loadedSegments.Any()
+                ? loadedSegments.Max(s => s.MaxGeneration)
+                : 0;
+
+            return new BootstrapperResult(maxGenerationLoaded);
         }
 
         private async Task<IEnumerable<Segment>> GetAvailableSegmentsAsync(IEnumerable<ITable> tables)
