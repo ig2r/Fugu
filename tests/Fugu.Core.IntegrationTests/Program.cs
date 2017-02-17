@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Fugu.IntegrationTests
+namespace Fugu.Core.IntegrationTests
 {
     public class Program
     {

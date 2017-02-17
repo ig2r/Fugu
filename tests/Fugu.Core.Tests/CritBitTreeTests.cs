@@ -3,7 +3,7 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-namespace Fugu.Tests
+namespace Fugu.Core.Tests
 {
     using Tree = CritBitTree<ByteArrayKeyTraits, byte[], int>;
 

@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Fugu.Tests
+namespace Fugu.Core.Tests
 {
     public class DurabilityTests
     {
