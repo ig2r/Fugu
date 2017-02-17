@@ -28,14 +28,12 @@ namespace Fugu.Actors
 
         private Task HandleMessageAsync(Message message)
         {
-            if (message is Message.Commit)
+            switch (message)
             {
-                var commit = (Message.Commit)message;
-                return _core.CommitAsync(commit.WriteBatch, commit.ReplyChannel);
-            }
-            else
-            {
-                throw new NotSupportedException();
+                case Message.Commit commit:
+                    return _core.CommitAsync(commit.WriteBatch, commit.ReplyChannel);
+                default:
+                    throw new NotSupportedException();
             }
         }
 

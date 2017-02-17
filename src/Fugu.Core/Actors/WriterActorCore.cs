@@ -58,8 +58,7 @@ namespace Fugu.Actors
             // First pass: write put/tombstone keys
             foreach (var change in changes)
             {
-                var put = change.Value as WriteBatchItem.Put;
-                if (put != null)
+                if (change.Value is WriteBatchItem.Put put)
                 {
                     _tableWriter.WritePut(change.Key, put.Value.Length);
                 }
@@ -74,8 +73,7 @@ namespace Fugu.Actors
 
             foreach (var change in changes)
             {
-                var put = change.Value as WriteBatchItem.Put;
-                if (put != null)
+                if (change.Value is WriteBatchItem.Put put)
                 {
                     var valueEntry = new IndexEntry.Value(_segment, _tableWriter.Position, put.Value.Length);
                     indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(change.Key, valueEntry));

@@ -87,10 +87,8 @@ namespace Fugu.Common
             // Trace down once more from the root, building up a stack of nodes that we'll need to yield items from
             Node n = _root;
             var stack = new Stack<Node>();
-            while (n is Node.Branch)
+            while (n is Node.Branch branch)
             {
-                var branch = (Node.Branch)n;
-
                 // Stop if this branch is at a position past the crit-bit
                 if (branch.BitIndex >= critBitIndex)
                     break;
@@ -176,9 +174,8 @@ namespace Fugu.Common
             while (stack.Count > 0)
             {
                 var node = stack.Pop();
-                if (node is Node.Branch)
+                if (node is Node.Branch branch)
                 {
-                    var branch = (Node.Branch)node;
                     stack.Push(branch.One);
                     stack.Push(branch.Zero);
                 }

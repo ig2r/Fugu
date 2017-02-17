@@ -34,22 +34,17 @@ namespace Fugu.Actors
 
         private Task HandleMessageAsync(Message message)
         {
-            if (message is Message.UpdateIndex)
+            switch (message)
             {
-                var updateIndex = (Message.UpdateIndex)message;
-                _core.UpdateIndex(updateIndex.Clock, updateIndex.Index, updateIndex.ReplyChannel);
-                return Task.CompletedTask;
-            }
-            else if (message is Message.GetSnapshot)
-            {
-                var getSnapshot = (Message.GetSnapshot)message;
-                var snapshot = _core.GetSnapshot();
-                getSnapshot.ReplyChannel.SetResult(snapshot);
-                return Task.CompletedTask;
-            }
-            else
-            {
-                throw new NotSupportedException();
+                case Message.UpdateIndex updateIndex:
+                    _core.UpdateIndex(updateIndex.Clock, updateIndex.Index, updateIndex.ReplyChannel);
+                    return Task.CompletedTask;
+                case Message.GetSnapshot getSnapshot:
+                    var snapshot = _core.GetSnapshot();
+                    getSnapshot.ReplyChannel.SetResult(snapshot);
+                    return Task.CompletedTask;
+                default:
+                    throw new NotSupportedException();
             }
         }
 

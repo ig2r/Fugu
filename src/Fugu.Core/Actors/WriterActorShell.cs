@@ -33,20 +33,15 @@ namespace Fugu.Actors
 
         private Task HandleMessageAsync(Message message)
         {
-            if (message is Message.Commit)
+            switch (message)
             {
-                var commit = (Message.Commit)message;
-                _core.Commit(commit.WriteBatch, commit.ReplyChannel);
-                return Task.CompletedTask;
-            }
-            else if (message is Message.StartNewSegment)
-            {
-                var startNewSegment = (Message.StartNewSegment)message;
-                return _core.StartNewSegmentAsync(startNewSegment.OutputTable);
-            }
-            else
-            {
-                throw new NotSupportedException();
+                case Message.Commit commit:
+                    _core.Commit(commit.WriteBatch, commit.ReplyChannel);
+                    return Task.CompletedTask;
+                case Message.StartNewSegment startNewSegment:
+                    return _core.StartNewSegmentAsync(startNewSegment.OutputTable);
+                default:
+                    throw new NotSupportedException();
             }
         }
 

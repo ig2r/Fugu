@@ -32,15 +32,13 @@ namespace Fugu.Actors
 
         private Task HandleMessageAsync(Message message)
         {
-            if (message is Message.UpdateIndex)
+            switch (message)
             {
-                var updateIndex = (Message.UpdateIndex)message;
-                _core.UpdateIndex(updateIndex.Clock, updateIndex.IndexUpdates, updateIndex.ReplyChannel);
-                return Task.CompletedTask;
-            }
-            else
-            {
-                throw new NotSupportedException();
+                case Message.UpdateIndex updateIndex:
+                    _core.UpdateIndex(updateIndex.Clock, updateIndex.IndexUpdates, updateIndex.ReplyChannel);
+                    return Task.CompletedTask;
+                default:
+                    throw new NotSupportedException();
             }
         }
 
