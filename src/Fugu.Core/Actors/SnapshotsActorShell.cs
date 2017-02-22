@@ -1,7 +1,5 @@
 ﻿using Fugu.Common;
-using System;
 using System.Threading.Tasks;
-using System.Threading.Tasks.Dataflow;
 using Index = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
 namespace Fugu.Actors
@@ -9,80 +7,30 @@ namespace Fugu.Actors
     public class SnapshotsActorShell : ISnapshotsActor
     {
         private readonly SnapshotsActorCore _core;
-        private readonly ActionBlock<Message> _handlerBlock;
+        private readonly MessageLoop _loop = new MessageLoop();
 
         public SnapshotsActorShell(SnapshotsActorCore core)
         {
             Guard.NotNull(core, nameof(core));
             _core = core;
-            _handlerBlock = new ActionBlock<Message>(HandleMessageAsync, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1 });
         }
 
         #region ISnapshotsActor
 
-        public void UpdateIndex(StateVector clock, Index index, TaskCompletionSource<VoidTaskResult> replyChannel)
+        public async void UpdateIndex(StateVector clock, Index index, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
-            _handlerBlock.Post(new Message.UpdateIndex(clock, index, replyChannel));
-        }
-
-        public void GetSnapshot(TaskCompletionSource<Snapshot> replyChannel)
-        {
-            _handlerBlock.Post(new Message.GetSnapshot(replyChannel));
-        }
-
-        #endregion
-
-        private Task HandleMessageAsync(Message message)
-        {
-            switch (message)
+            using (await _loop.WaitAsync())
             {
-                case Message.UpdateIndex updateIndex:
-                    _core.UpdateIndex(updateIndex.Clock, updateIndex.Index, updateIndex.ReplyChannel);
-                    return Task.CompletedTask;
-                case Message.GetSnapshot getSnapshot:
-                    var snapshot = _core.GetSnapshot();
-                    getSnapshot.ReplyChannel.SetResult(snapshot);
-                    return Task.CompletedTask;
-                default:
-                    throw new NotSupportedException();
+                _core.UpdateIndex(clock, index, replyChannel);
             }
         }
 
-        #region Nested types
-
-        private abstract class Message
+        public async void GetSnapshot(TaskCompletionSource<Snapshot> replyChannel)
         {
-            private Message()
+            using (await _loop.WaitAsync())
             {
-            }
-
-            public sealed class UpdateIndex : Message
-            {
-                public UpdateIndex(StateVector clock, Index index, TaskCompletionSource<VoidTaskResult> replyChannel)
-
-                {
-                    Guard.NotNull(index, nameof(index));
-                    Guard.NotNull(replyChannel, nameof(replyChannel));
-
-                    Clock = clock;
-                    Index = index;
-                    ReplyChannel = replyChannel;
-                }
-
-                public StateVector Clock { get; }
-                public Index Index { get; }
-                public TaskCompletionSource<VoidTaskResult> ReplyChannel { get; }
-            }
-
-            public sealed class GetSnapshot : Message
-            {
-                public GetSnapshot(TaskCompletionSource<Snapshot> replyChannel)
-                {
-                    Guard.NotNull(replyChannel, nameof(replyChannel));
-                    ReplyChannel = replyChannel;
-                }
-
-                public TaskCompletionSource<Snapshot> ReplyChannel { get; }
+                var snapshot = _core.GetSnapshot();
+                replyChannel.SetResult(snapshot);
             }
         }
 
