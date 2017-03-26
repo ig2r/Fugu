@@ -13,9 +13,9 @@ namespace Fugu.Actors
     /// </remarks>
     public interface IIndexActor
     {
-        void UpdateIndex(
-            StateVector clock,
-            IReadOnlyList<KeyValuePair<byte[], IndexEntry>> indexUpdates,
-            TaskCompletionSource<VoidTaskResult> replyChannel);
+        //void UpdateIndex(
+        //    StateVector clock,
+        //    IReadOnlyList<KeyValuePair<byte[], IndexEntry>> indexUpdates,
+        //    TaskCompletionSource<VoidTaskResult> replyChannel);
     }
 }

@@ -1,26 +1,27 @@
 ﻿using Fugu.Common;
 using System;
 using System.Threading.Tasks;
-using Index = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
+using CritBitTree = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
 namespace Fugu
 {
     public sealed class Snapshot : IDisposable
     {
-        private readonly StateVector _clock;
-        private readonly Index _index;
+        private readonly CritBitTree _index;
         private readonly Action<Snapshot> _onDisposed;
         private bool _disposed = false;
 
-        public Snapshot(StateVector clock, Index index, Action<Snapshot> onDisposed)
+        public Snapshot(StateVector clock, CritBitTree index, Action<Snapshot> onDisposed)
         {
             Guard.NotNull(index, nameof(index));
             Guard.NotNull(onDisposed, nameof(onDisposed));
 
-            _clock = clock;
+            Clock = clock;
             _index = index;
             _onDisposed = onDisposed;
         }
+
+        public StateVector Clock { get; }
 
         public async Task<byte[]> TryGetValueAsync(byte[] key)
         {

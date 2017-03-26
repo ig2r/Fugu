@@ -10,7 +10,5 @@ namespace Fugu.Actors
     /// </summary>
     public interface IWriterActor
     {
-        void StartNewSegment(IOutputTable outputTable);
-        void Commit(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel);
     }
 }

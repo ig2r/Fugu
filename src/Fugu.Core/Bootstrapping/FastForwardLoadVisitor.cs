@@ -1,4 +1,5 @@
 ﻿using Fugu.Actors;
+using Fugu.Channels;
 using Fugu.Common;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,22 +10,22 @@ namespace Fugu.Bootstrapping
     public class FastForwardLoadVisitor : TableVisitorBase
     {
         private readonly Segment _segment;
-        private readonly IIndexActor _indexActor;
+        private readonly Channel<UpdateIndexMessage> _indexUpdateChannel;
 
-        public FastForwardLoadVisitor(Segment segment, IIndexActor indexActor)
+        public FastForwardLoadVisitor(Segment segment, Channel<UpdateIndexMessage> indexUpdateChannel)
         {
             Guard.NotNull(segment, nameof(segment));
-            Guard.NotNull(indexActor, nameof(indexActor));
+            Guard.NotNull(indexUpdateChannel, nameof(indexUpdateChannel));
 
             _segment = segment;
-            _indexActor = indexActor;
+            _indexUpdateChannel = indexUpdateChannel;
         }
 
         public Task Completion { get; private set; } = Task.CompletedTask;
 
         #region TableVisitorBase overrides
 
-        public override void OnCommit(IEnumerable<byte[]> tombstones, IEnumerable<ParsedPutRecord> puts, ulong commitChecksum)
+        public override async Task OnCommitAsync(IEnumerable<byte[]> tombstones, IEnumerable<ParsedPutRecord> puts, ulong commitChecksum)
         {
             var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>();
 
@@ -40,7 +41,8 @@ namespace Fugu.Bootstrapping
 
             var replyChannel = new TaskCompletionSource<VoidTaskResult>();
             Completion = replyChannel.Task;
-            _indexActor.UpdateIndex(new StateVector(), indexUpdates, replyChannel);
+
+            await _indexUpdateChannel.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel));
         }
 
         #endregion

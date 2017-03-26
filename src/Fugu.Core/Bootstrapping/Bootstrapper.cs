@@ -1,4 +1,5 @@
 ﻿using Fugu.Actors;
+using Fugu.Channels;
 using Fugu.Common;
 using Fugu.Format;
 using System;
@@ -14,17 +15,18 @@ namespace Fugu.Bootstrapping
     /// </summary>
     public class Bootstrapper
     {
-        public async Task<BootstrapperResult> RunAsync(ITableSet tableSet, IIndexActor indexActor)
+        public async Task<BootstrapperResult> RunAsync(ITableSet tableSet, IIndexActor indexActor, Channel<UpdateIndexMessage> indexUpdateChannel)
         {
             Guard.NotNull(tableSet, nameof(tableSet));
             Guard.NotNull(indexActor, nameof(indexActor));
+            Guard.NotNull(indexUpdateChannel, nameof(indexUpdateChannel));
 
             // Walk through tables in table set and try to load segment metadata
             var tables = await tableSet.GetTablesAsync();
             var availableSegments = await GetAvailableSegmentsAsync(tables);
 
             var loadStrategy = new SegmentLoadStrategy();
-            var tableLoader = new SegmentLoader(new TableParser(), indexActor);
+            var tableLoader = new SegmentLoader(new TableParser(), indexActor, indexUpdateChannel);
 
             var loadedSegments = await loadStrategy.RunAsync(availableSegments, tableLoader);
 

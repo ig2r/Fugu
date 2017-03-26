@@ -3,41 +3,52 @@ using System.Diagnostics;
 
 namespace Fugu.Common
 {
-    [DebuggerDisplay("<{Write}, {Index}, {Compaction}>")]
+    [DebuggerDisplay("<{Commit}, {OutputGeneration}, {Compaction}>")]
     public struct StateVector : IEquatable<StateVector>
     {
-        private StateVector(long write, long index, long compaction)
+        public StateVector(long commit, long outputGeneration, long compaction)
         {
-            Write = write;
-            Index = index;
+            Commit = commit;
+            OutputGeneration = outputGeneration;
             Compaction = compaction;
         }
 
-        public long Write { get; }
-        public long Index { get; }
+        /// <summary>
+        /// Gets the monotonically increasing vector component associated with a commit to the store.
+        /// </summary>
+        public long Commit { get; }
+
+        /// <summary>
+        /// Gets the monotonically increasing vector component that indicates the generation of the current output segment.
+        /// </summary>
+        public long OutputGeneration { get; }
+
+        /// <summary>
+        /// Gets the monotonically increasing vector component associated with a compaction operation.
+        /// </summary>
         public long Compaction { get; }
 
         public static StateVector Max(StateVector left, StateVector right)
         {
             return new StateVector(
-                Math.Max(left.Write, right.Write),
-                Math.Max(left.Index, right.Index),
+                Math.Max(left.Commit, right.Commit),
+                Math.Max(left.OutputGeneration, right.OutputGeneration),
                 Math.Max(left.Compaction, right.Compaction));
         }
 
-        public StateVector NextWrite()
+        public StateVector NextCommit()
         {
-            return new StateVector(Write + 1, Index, Compaction);
+            return new StateVector(Commit + 1, OutputGeneration, Compaction);
         }
 
-        public StateVector NextIndex()
+        public StateVector NextOutputGeneration()
         {
-            return new StateVector(Write, Index + 1, Compaction);
+            return new StateVector(Commit, OutputGeneration + 1, Compaction);
         }
 
         public StateVector NextCompaction()
         {
-            return new StateVector(Write, Index, Compaction + 1);
+            return new StateVector(Commit, OutputGeneration, Compaction + 1);
         }
 
         public bool Equals(StateVector other)
@@ -52,13 +63,13 @@ namespace Fugu.Common
 
         public override int GetHashCode()
         {
-            return Index.GetHashCode() ^ Compaction.GetHashCode();
+            return OutputGeneration.GetHashCode() ^ Compaction.GetHashCode();
         }
 
         public static bool operator ==(StateVector left, StateVector right)
         {
-            return left.Write == right.Write &&
-                left.Index == right.Index &&
+            return left.Commit == right.Commit &&
+                left.OutputGeneration == right.OutputGeneration &&
                 left.Compaction == right.Compaction;
         }
 
@@ -69,15 +80,15 @@ namespace Fugu.Common
 
         public static bool operator <=(StateVector left, StateVector right)
         {
-            return left.Write <= right.Write &&
-                left.Index <= right.Index &&
+            return left.Commit <= right.Commit &&
+                left.OutputGeneration <= right.OutputGeneration &&
                 left.Compaction <= right.Compaction;
         }
 
         public static bool operator >=(StateVector left, StateVector right)
         {
-            return left.Write >= right.Write &&
-                left.Index >= right.Index &&
+            return left.Commit >= right.Commit &&
+                left.OutputGeneration >= right.OutputGeneration &&
                 left.Compaction >= right.Compaction;
         }
 

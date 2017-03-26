@@ -1,4 +1,5 @@
 ﻿using Fugu.TableSets;
+using System;
 using System.Text;
 using System.Threading.Tasks;
 using Xunit;
@@ -77,6 +78,23 @@ namespace Fugu.Core.Tests
         }
 
         [Fact]
+        public async Task CommitAsync_Put1000RandomKeys_Succeeds()
+        {
+            var random = new Random();
+
+            var tableSet = new InMemoryTableSet();
+            using (var store = await KeyValueStore.CreateAsync(tableSet))
+            {
+                for (int i = 0; i < 1000; i++)
+                {
+                    var batch = new WriteBatch();
+                    batch.Put(Encoding.UTF8.GetBytes("key:" + random.Next(100)), Encoding.UTF8.GetBytes("value:1"));
+                    await store.CommitAsync(batch);
+                }
+            }
+        }
+
+        [Fact]
         public async Task GetSnapshotAsync_EmptyStore_Succeeds()
         {
             var tableSet = new InMemoryTableSet();
@@ -90,7 +108,7 @@ namespace Fugu.Core.Tests
         [Fact]
         public async Task CommitAsync_PutSingleKey_KeyIsVisibleInSnapshot()
         {
-            // Arrange:
+            // Arrange
             var key1 = Encoding.UTF8.GetBytes("key:1");
             var value1 = Encoding.UTF8.GetBytes("value:1");
 
@@ -100,15 +118,45 @@ namespace Fugu.Core.Tests
                 var batch = new WriteBatch();
                 batch.Put(key1, value1);
 
-                // Act:
+                // Act
                 await store.CommitAsync(batch);
 
-                // Assert:
+                // Assert
                 using (var snapshot = await store.GetSnapshotAsync())
                 {
                     var retrieved = await snapshot.TryGetValueAsync(key1);
                     Assert.Equal<byte>(value1, retrieved);
                 }
+            }
+        }
+
+        [Fact]
+        public async Task GetSnapshotAsync_ReleasingOlderOfTwoSnapshots_UpdatesOldestVisibleState()
+        {
+            // Arrange
+            var key1 = Encoding.UTF8.GetBytes("key:1");
+            var value1 = Encoding.UTF8.GetBytes("value:1");
+
+            var tableSet = new InMemoryTableSet();
+            using (var store = await KeyValueStore.CreateAsync(tableSet))
+            {
+                var snapshot1 = await store.GetSnapshotAsync();
+
+                var batch = new WriteBatch();
+                batch.Put(key1, value1);
+                await store.CommitAsync(batch);
+
+                var snapshot2 = await store.GetSnapshotAsync();
+
+                batch = new WriteBatch();
+                batch.Put(key1, value1);
+                await store.CommitAsync(batch);
+
+                // Act
+                snapshot1.Dispose();
+                snapshot2.Dispose();
+
+                // Assert
             }
         }
     }

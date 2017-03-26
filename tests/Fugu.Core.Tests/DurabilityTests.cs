@@ -13,7 +13,7 @@ namespace Fugu.Core.Tests
         [Fact]
         public async Task Durability_PutSingleKey_KeyIsAvailableAfterRecreatingStore()
         {
-            // Arrange:
+            // Arrange
             var kvp1 = MakeKey("key:1", "value:1");
             var tableSet = new InMemoryTableSet();
 
@@ -24,10 +24,10 @@ namespace Fugu.Core.Tests
                 await store.CommitAsync(batch);
             }
 
-            // Act:
+            // Act
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             {
-                // Assert:
+                // Assert
                 using (var snapshot = await store.GetSnapshotAsync())
                 {
                     var retrieved = await snapshot.TryGetValueAsync(kvp1.Key);
@@ -39,7 +39,7 @@ namespace Fugu.Core.Tests
         [Fact]
         public async Task Durability_WriteToStoreAfterRecreate_RetainsBothWrites()
         {
-            // Arrange:
+            // Arrange
             var kvp1 = MakeKey("key:1", "value:1");
             var tableSet = new InMemoryTableSet();
 
@@ -50,7 +50,7 @@ namespace Fugu.Core.Tests
                 await store.CommitAsync(batch);
             }
 
-            // Act:
+            // Act
             var kvp2 = MakeKey("key:2", "value:2");
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             {
@@ -59,7 +59,7 @@ namespace Fugu.Core.Tests
                 await store.CommitAsync(batch);
             }
 
-            // Assert:
+            // Assert
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             using (var snapshot = await store.GetSnapshotAsync())
             {

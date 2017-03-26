@@ -1,29 +1,27 @@
-﻿using Fugu.Common;
-using System.Threading.Tasks;
+﻿using Fugu.Channels;
+using Fugu.Common;
 
 namespace Fugu.Actors
 {
     public class PartitioningActorShell : IPartitioningActor
     {
         private readonly PartitioningActorCore _core;
-        private readonly MessageLoop _loop = new MessageLoop();
+        private readonly Channel<CommitWriteBatchMessage> _commitWriteBatchChannel;
 
-        public PartitioningActorShell(PartitioningActorCore core)
+        public PartitioningActorShell(PartitioningActorCore core, Channel<CommitWriteBatchMessage> commitWriteBatchChannel)
         {
             Guard.NotNull(core, nameof(core));
+            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
+
             _core = core;
+            _commitWriteBatchChannel = commitWriteBatchChannel;
         }
 
-        #region IPartitioningActor
-
-        public async void Commit(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel)
+        public async void Run()
         {
-            using (await _loop.WaitAsync())
-            {
-                await _core.CommitAsync(writeBatch, replyChannel);
-            }
+            await new SelectBuilder()
+                .Case(_commitWriteBatchChannel, msg => _core.CommitAsync(msg.WriteBatch, msg.ReplyChannel))
+                .SelectAsync(_ => true);
         }
-
-        #endregion
     }
 }

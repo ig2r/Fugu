@@ -1,4 +1,5 @@
-﻿using Fugu.Common;
+﻿using Fugu.Channels;
+using Fugu.Common;
 using Fugu.Format;
 using System;
 using System.Runtime.InteropServices;
@@ -13,19 +14,22 @@ namespace Fugu.Actors
         private readonly long _tableHeaderSize;
         private readonly long _tableFooterSize;
 
+        private readonly Channel<CommitWriteBatchToSegmentMessage> _commitWriteBatchChannel;
         private readonly ITableFactory _tableFactory;
-        private readonly IWriterActor _writerActor;
 
+        private StateVector _clock = new StateVector();
+
+        private IOutputTable _outputTable;
         private long _totalCapacity = 0;
         private long _spaceLeftInSegment = 0;
 
-        public PartitioningActorCore(ITableFactory tableFactory, IWriterActor writerActor)
+        public PartitioningActorCore(ITableFactory tableFactory, Channel<CommitWriteBatchToSegmentMessage> commitWriteBatchChannel)
         {
             Guard.NotNull(tableFactory, nameof(tableFactory));
-            Guard.NotNull(writerActor, nameof(writerActor));
+            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
 
             _tableFactory = tableFactory;
-            _writerActor = writerActor;
+            _commitWriteBatchChannel = commitWriteBatchChannel;
 
             _tableHeaderSize = Marshal.SizeOf<TableHeaderRecord>();
             _tableFooterSize = Marshal.SizeOf<TableFooterRecord>();
@@ -33,6 +37,8 @@ namespace Fugu.Actors
 
         public async Task CommitAsync(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
+            _clock = _clock.NextCommit();
+
             var requiredSpace = GetRequiredSpaceForWriteBatch(writeBatch);
 
             // If there isn't enough space left in the current output segment for the incoming write, or if there's
@@ -40,15 +46,13 @@ namespace Fugu.Actors
             if (_spaceLeftInSegment < requiredSpace + _tableFooterSize)
             {
                 var requestedCapacity = Math.Max(_tableHeaderSize + requiredSpace + _tableFooterSize, MIN_CAPACITY);
-                var outputTable = await _tableFactory.CreateTableAsync(requestedCapacity);
-                _writerActor.StartNewSegment(outputTable);
-
-                _totalCapacity += outputTable.Capacity;
-                _spaceLeftInSegment = outputTable.Capacity - _tableHeaderSize;
+                _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity);
+                _totalCapacity += _outputTable.Capacity;
+                _spaceLeftInSegment = _outputTable.Capacity - _tableHeaderSize;
             }
 
             // Pass on write batch to writer actor
-            _writerActor.Commit(writeBatch, replyChannel);
+            await _commitWriteBatchChannel.SendAsync(new CommitWriteBatchToSegmentMessage(_clock, writeBatch, _outputTable, replyChannel));
             _spaceLeftInSegment -= requiredSpace;
         }
 

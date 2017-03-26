@@ -1,5 +1,6 @@
 ﻿using Fugu.Actors;
 using Fugu.Bootstrapping;
+using Fugu.Channels;
 using Fugu.Common;
 using System;
 using System.Threading.Tasks;
@@ -12,48 +13,99 @@ namespace Fugu
         private readonly IWriterActor _writerActor;
         private readonly IIndexActor _indexActor;
         private readonly ISnapshotsActor _snapshotsActor;
+        private readonly ICompactionActor _compactionActor;
+
+        private readonly Channel<TaskCompletionSource<Snapshot>> _getSnapshotChannel;
+        private readonly Channel<CommitWriteBatchMessage> _commitWriteBatchChannel;
 
         private KeyValueStore(
             IPartitioningActor partitioningActor,
             IWriterActor writerActor,
             IIndexActor indexActor,
-            ISnapshotsActor snapshotsActor)
+            ISnapshotsActor snapshotsActor,
+            ICompactionActor compactionActor,
+            Channel<TaskCompletionSource<Snapshot>> getSnapshotChannel,
+            Channel<CommitWriteBatchMessage> commitWriteBatchChannel)
         {
             Guard.NotNull(partitioningActor, nameof(partitioningActor));
             Guard.NotNull(writerActor, nameof(writerActor));
             Guard.NotNull(indexActor, nameof(indexActor));
             Guard.NotNull(snapshotsActor, nameof(snapshotsActor));
+            Guard.NotNull(compactionActor, nameof(compactionActor));
+            Guard.NotNull(getSnapshotChannel, nameof(getSnapshotChannel));
+            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
 
             _partitioningActor = partitioningActor;
             _writerActor = writerActor;
             _indexActor = indexActor;
             _snapshotsActor = snapshotsActor;
+            _compactionActor = compactionActor;
+            _getSnapshotChannel = getSnapshotChannel;
+            _commitWriteBatchChannel = commitWriteBatchChannel;
         }
 
         public static async Task<KeyValueStore> CreateAsync(ITableSet tableSet)
         {
             Guard.NotNull(tableSet, nameof(tableSet));
 
+            // Create channels that will transmit messages between actors
+            var updateIndexChannel = new UnbufferedChannel<UpdateIndexMessage>();
+            var snapshotsUpdateChannel = new UnbufferedChannel<SnapshotsUpdateMessage>();
+            var getSnapshotChannel = new UnbufferedChannel<TaskCompletionSource<Snapshot>>();
+            var writeChannel = new UnbufferedChannel<CommitWriteBatchToSegmentMessage>();
+            var commitWriteBatchChannel = new UnbufferedChannel<CommitWriteBatchMessage>();
+            var segmentSizesChangedChannel = new UnbufferedChannel<SegmentSizesChangedMessage>();
+            var evictSegmentChannel = new UnbufferedChannel<EvictSegmentMessage>();
+            var oldestVisibleStateChangedChannel = new UnbufferedChannel<StateVector>();
+
             // Create actors managing store state
-            var snapshotsActor = new SnapshotsActorShell(new SnapshotsActorCore());
-            var indexActor = new IndexActorShell(new IndexActorCore(snapshotsActor));
+            var snapshotsActor = new SnapshotsActorShell(
+                new SnapshotsActorCore(oldestVisibleStateChangedChannel),
+                snapshotsUpdateChannel, getSnapshotChannel);
+            snapshotsActor.Run();
+
+            var indexActor = new IndexActorShell(
+                new IndexActorCore(snapshotsUpdateChannel, segmentSizesChangedChannel),
+                updateIndexChannel);
+            indexActor.Run();
+
+            var compactionActor = new CompactionActorShell(
+                new CompactionActorCore(evictSegmentChannel),
+                segmentSizesChangedChannel);
+            compactionActor.Run();
+
+            var evictionActor = new EvictionActorShell(
+                new EvictionActorCore(tableSet),
+                evictSegmentChannel, oldestVisibleStateChangedChannel);
+            evictionActor.Run();
 
             // Bootstrap store state from given table set
             var bootstrapper = new Bootstrapper();
-            var result = await bootstrapper.RunAsync(tableSet, indexActor);
+            var result = await bootstrapper.RunAsync(tableSet, indexActor, updateIndexChannel);
 
             // Create actors accepting new writes to the store
-            var writerActor = new WriterActorShell(new WriterActorCore(indexActor, result.MaxGenerationLoaded));
-            var partitioningActor = new PartitioningActorShell(new PartitioningActorCore(tableSet, writerActor));
+            var writerActor = new WriterActorShell(
+                new WriterActorCore(result.MaxGenerationLoaded, updateIndexChannel),
+                writeChannel);
+            writerActor.Run();
 
-            var store = new KeyValueStore(partitioningActor, writerActor, indexActor, snapshotsActor);
+            var partitioningActor = new PartitioningActorShell(
+                new PartitioningActorCore(tableSet, writeChannel),
+                commitWriteBatchChannel);
+            partitioningActor.Run();
+
+            // From these components, create the store object itself
+            var store = new KeyValueStore(
+                partitioningActor, writerActor, indexActor, snapshotsActor, compactionActor,
+                getSnapshotChannel, commitWriteBatchChannel);
+
             return store;
         }
 
         public Task<Snapshot> GetSnapshotAsync()
         {
             var replyChannel = new TaskCompletionSource<Snapshot>();
-            _snapshotsActor.GetSnapshot(replyChannel);
+            _getSnapshotChannel.SendAsync(replyChannel);
             return replyChannel.Task;
         }
 
@@ -61,7 +113,7 @@ namespace Fugu
         {
             Guard.NotNull(writeBatch, nameof(writeBatch));
             var replyChannel = new TaskCompletionSource<VoidTaskResult>();
-            _partitioningActor.Commit(writeBatch, replyChannel);
+            _commitWriteBatchChannel.SendAsync(new CommitWriteBatchMessage(writeBatch, replyChannel));
             return replyChannel.Task;
         }
 

@@ -1,5 +1,5 @@
-﻿using Fugu.Common;
-using System.Collections.Generic;
+﻿using Fugu.Channels;
+using Fugu.Common;
 using System.Threading.Tasks;
 
 namespace Fugu.Actors
@@ -7,27 +7,24 @@ namespace Fugu.Actors
     public class IndexActorShell : IIndexActor
     {
         private readonly IndexActorCore _core;
-        private readonly MessageLoop _loop = new MessageLoop();
+        private readonly Channel<UpdateIndexMessage> _updateIndexChannel;
 
-        public IndexActorShell(IndexActorCore core)
+        public IndexActorShell(IndexActorCore core, Channel<UpdateIndexMessage> updateIndexChannel)
         {
             Guard.NotNull(core, nameof(core));
             _core = core;
+            _updateIndexChannel = updateIndexChannel;
         }
 
-        #region IIndexActor
-
-        public async void UpdateIndex(
-            StateVector clock,
-            IReadOnlyList<KeyValuePair<byte[], IndexEntry>> indexUpdates,
-            TaskCompletionSource<VoidTaskResult> replyChannel)
+        public async void Run()
         {
-            using (await _loop.WaitAsync())
-            {
-                _core.UpdateIndex(clock, indexUpdates, replyChannel);
-            }
+            await new SelectBuilder()
+                .Case(_updateIndexChannel, msg =>
+                {
+                    _core.UpdateIndex(msg.Clock, msg.IndexUpdates, msg.ReplyChannel);
+                    return Task.CompletedTask;
+                })
+                .SelectAsync(_ => true);
         }
-
-        #endregion
     }
 }

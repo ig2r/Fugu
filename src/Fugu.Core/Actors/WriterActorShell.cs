@@ -1,37 +1,27 @@
-﻿using Fugu.Common;
-using System.Threading.Tasks;
+﻿using Fugu.Channels;
+using Fugu.Common;
 
 namespace Fugu.Actors
 {
     public class WriterActorShell : IWriterActor
     {
         private readonly WriterActorCore _core;
-        private readonly MessageLoop _loop = new MessageLoop();
+        private readonly Channel<CommitWriteBatchToSegmentMessage> _commitWriteBatchChannel;
 
-        public WriterActorShell(WriterActorCore core)
+        public WriterActorShell(WriterActorCore core, Channel<CommitWriteBatchToSegmentMessage> commitWriteBatchChannel)
         {
             Guard.NotNull(core, nameof(core));
+            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
+
             _core = core;
+            _commitWriteBatchChannel = commitWriteBatchChannel;
         }
 
-        #region IWriterActor
-
-        public async void Commit(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel)
+        public async void Run()
         {
-            using (await _loop.WaitAsync())
-            {
-                _core.Commit(writeBatch, replyChannel);
-            }
+            await new SelectBuilder()
+                .Case(_commitWriteBatchChannel, msg => _core.CommitAsync(msg.Clock, msg.WriteBatch, msg.OutputTable, msg.ReplyChannel))
+                .SelectAsync(_ => true);
         }
-
-        public async void StartNewSegment(IOutputTable outputTable)
-        {
-            using (await _loop.WaitAsync())
-            {
-                await _core.StartNewSegmentAsync(outputTable);
-            }
-        }
-
-        #endregion
     }
 }

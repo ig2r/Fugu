@@ -10,6 +10,6 @@ namespace Fugu.Actors
     /// </summary>
     public interface IPartitioningActor
     {
-        void Commit(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel);
+        //void Commit(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel);
     }
 }

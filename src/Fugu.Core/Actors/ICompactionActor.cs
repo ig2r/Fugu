@@ -1,6 +1,6 @@
 ﻿namespace Fugu.Actors
 {
-    public interface ISnapshotsActor
+    public interface ICompactionActor
     {
     }
 }

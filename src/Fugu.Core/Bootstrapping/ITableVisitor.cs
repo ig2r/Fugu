@@ -9,7 +9,7 @@ namespace Fugu.Bootstrapping
     public interface ITableVisitor
     {
         void OnTableHeader(TableHeaderRecord header);
-        void OnCommit(IEnumerable<byte[]> tombstones, IEnumerable<ParsedPutRecord> puts, ulong commitChecksum);
+        Task OnCommitAsync(IEnumerable<byte[]> tombstones, IEnumerable<ParsedPutRecord> puts, ulong commitChecksum);
         void OnTableFooter();
 
         void OnError(Exception exception);

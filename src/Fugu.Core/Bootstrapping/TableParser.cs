@@ -1,4 +1,5 @@
-﻿using Fugu.Format;
+﻿using Fugu.Common;
+using Fugu.Format;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -76,16 +77,16 @@ namespace Fugu.Bootstrapping
 
             // Determine position of put values
             var puts = new List<ParsedPutRecord>();
-            foreach (var kvp in putRecords)
+            foreach (var (key, putRecord) in putRecords)
             {
-                puts.Add(new ParsedPutRecord(kvp.Key, reader.Position, kvp.Value.ValueLength));
-                reader.SkipBytes(kvp.Value.ValueLength);
+                puts.Add(new ParsedPutRecord(key, reader.Position, putRecord.ValueLength));
+                reader.SkipBytes(putRecord.ValueLength);
             }
 
             // Read footer
             var footer = await reader.ReadCommitFooterAsync();
 
-            visitor.OnCommit(tombstones, puts, footer.CommitChecksum);
+            await visitor.OnCommitAsync(tombstones, puts, footer.CommitChecksum);
         }
     }
 }

@@ -19,9 +19,9 @@ namespace Fugu.Core.Tests
         [Fact]
         public void Empty_IsNotNull()
         {
-            // Arrange:
-            // Act:
-            // Assert:
+            // Arrange
+            // Act
+            // Assert
             Assert.NotNull(Tree.Empty);
         }
 
@@ -30,13 +30,13 @@ namespace Fugu.Core.Tests
         [Fact]
         public void SetItem_OnEmptyTree_ReturnsNonNullInstance()
         {
-            // Arrange:
+            // Arrange
             var empty = Tree.Empty;
 
-            // Act:
+            // Act
             var t = empty.SetItem(_empty, 1);
 
-            // Assert:
+            // Assert
             Assert.NotNull(t);
             Assert.NotSame(empty, t);
         }
@@ -44,14 +44,14 @@ namespace Fugu.Core.Tests
         [Fact]
         public void SetItem_InsertingSameItemTwice_OverwritesExistingItem()
         {
-            // Arrange:
+            // Arrange
             var t = Tree.Empty;
             t = t.SetItem(_test, 1);
 
-            // Act:
+            // Act
             t = t.SetItem(_test, 2);
 
-            // Assert:
+            // Assert
             var items = t.GetItems(new byte[0]).Select(kvp => kvp.Key).ToArray();
             Assert.Equal(new[] { _test }, items);
         }
@@ -59,17 +59,17 @@ namespace Fugu.Core.Tests
         [Fact]
         public void SetItem_FiveItems_InsertsAllItems()
         {
-            // Arrange:
+            // Arrange
             var t = Tree.Empty;
 
-            // Act:
+            // Act
             t = t.SetItem(_toasting, 1);
             t = t.SetItem(_slowly, 2);
             t = t.SetItem(_slow, 3);
             t = t.SetItem(_toaster, 4);
             t = t.SetItem(_test, 5);
 
-            // Assert:
+            // Assert
             var items = t.GetItems(new byte[0]).Select(kvp => kvp.Key).ToArray();
             Assert.Equal(new[] { _slow, _slowly, _test, _toaster, _toasting }, items);
         }
@@ -81,7 +81,7 @@ namespace Fugu.Core.Tests
         [Fact]
         public void GetItems_WithStartKeyThatExistsInTree_ReturnsAllItemsIncludingSearchKey()
         {
-            // Arrange:
+            // Arrange
             var t = Tree.Empty;
             t = t.SetItem(_toasting, 1);
             t = t.SetItem(_slowly, 2);
@@ -89,17 +89,17 @@ namespace Fugu.Core.Tests
             t = t.SetItem(_toaster, 4);
             t = t.SetItem(_test, 5);
 
-            // Act:
+            // Act
             var items = t.GetItems(_test).Select(kvp => kvp.Key).ToArray();
 
-            // Assert:
+            // Assert
             Assert.Equal(new[] { _test, _toaster, _toasting }, items);
         }
 
         [Fact]
         public void GetItems_WithStartKeyThatDoesNotExistInTree_ReturnsAllSuccessors()
         {
-            // Arrange:
+            // Arrange
             var t = Tree.Empty;
             t = t.SetItem(_toasting, 1);
             t = t.SetItem(_slowly, 2);
@@ -107,11 +107,11 @@ namespace Fugu.Core.Tests
             t = t.SetItem(_toaster, 4);
             t = t.SetItem(_test, 5);
 
-            // Act:
+            // Act
             var text = Encoding.UTF8.GetBytes("text");
             var items = t.GetItems(text).Select(kvp => kvp.Key).ToArray();
 
-            // Assert:
+            // Assert
             Assert.Equal(new[] { _toaster, _toasting }, items);
         }
         #endregion
@@ -126,13 +126,13 @@ namespace Fugu.Core.Tests
         [InlineData(new byte[] { 0xFF, 0xFF }, new[] { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0 })]
         public void GetBit_ForValidBitIndices_ReturnsExpectedRepresentations(byte[] key, int[] expectedBits)
         {
-            // Arrange:
+            // Arrange
             var traits = new ByteArrayKeyTraits();
 
-            // Act:
+            // Act
             var actualBits = Enumerable.Range(0, expectedBits.Length).Select(i => traits.GetBit(key, i)).ToArray();
 
-            // Assert:
+            // Assert
             Assert.Equal(expectedBits, actualBits);
         }
 
@@ -147,13 +147,13 @@ namespace Fugu.Core.Tests
         [InlineData(new byte[] { 0x55, 0xF7 }, new byte[] { 0x55, 0xF0, 0xFF }, 15)]
         public void FindCritBitIndex_ForValidData_ReturnsExpectedResults(byte[] key1, byte[] key2, int expectedBitIndex)
         {
-            // Arrange:
+            // Arrange
             var traits = new ByteArrayKeyTraits();
 
-            // Act:
+            // Act
             var actualBitIndex = traits.FindCritBitIndex(key1, key2);
 
-            // Assert:
+            // Assert
             Assert.Equal(expectedBitIndex, actualBitIndex);
         }
 

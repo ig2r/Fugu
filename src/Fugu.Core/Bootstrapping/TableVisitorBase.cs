@@ -14,8 +14,9 @@ namespace Fugu.Bootstrapping
         {
         }
 
-        public virtual void OnCommit(IEnumerable<byte[]> tombstones, IEnumerable<ParsedPutRecord> puts, ulong commitChecksum)
+        public virtual Task OnCommitAsync(IEnumerable<byte[]> tombstones, IEnumerable<ParsedPutRecord> puts, ulong commitChecksum)
         {
+            return Task.CompletedTask;
         }
 
         public virtual void OnTableFooter()
