@@ -45,7 +45,7 @@ namespace Fugu.Actors
 
                 // Reject the new key+value if one of the following holds:
                 // 1. The index already contains a newer entry for the given key;
-                // 2. The given update is a deletion for a key that's either not in the index, or is already a tombstone
+                // 2. The given update is a deletion for a key that's either not in the index, or is already a tombstone.
                 var currentEntryIsNewer = keyExists && update.Value.Segment.MaxGeneration < existingEntry.Segment.MinGeneration;
                 var noValueToDelete = update.Value is IndexEntry.Tombstone && !(keyExists && existingEntry is IndexEntry.Value);
                 if (currentEntryIsNewer || noValueToDelete)

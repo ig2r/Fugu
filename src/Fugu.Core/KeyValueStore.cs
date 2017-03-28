@@ -54,6 +54,7 @@ namespace Fugu
             var getSnapshotChannel = new UnbufferedChannel<TaskCompletionSource<Snapshot>>();
             var writeChannel = new UnbufferedChannel<CommitWriteBatchToSegmentMessage>();
             var commitWriteBatchChannel = new UnbufferedChannel<CommitWriteBatchMessage>();
+            var totalCapacityChangedChannel = new UnbufferedChannel<TotalCapacityChangedMessage>();
             var segmentSizesChangedChannel = new UnbufferedChannel<SegmentSizesChangedMessage>();
             var evictSegmentChannel = new UnbufferedChannel<EvictSegmentMessage>();
             var oldestVisibleStateChangedChannel = new UnbufferedChannel<StateVector>();
@@ -70,7 +71,12 @@ namespace Fugu
             indexActor.Run();
 
             var compactionActor = new CompactionActorShell(
-                new CompactionActorCore(evictSegmentChannel),
+                new CompactionActorCore(
+                    new AlwaysCompactCompactionStrategy(),
+                    tableSet,
+                    evictSegmentChannel,
+                    totalCapacityChangedChannel,
+                    updateIndexChannel),
                 segmentSizesChangedChannel);
             compactionActor.Run();
 
@@ -91,7 +97,8 @@ namespace Fugu
 
             var partitioningActor = new PartitioningActorShell(
                 new PartitioningActorCore(tableSet, writeChannel),
-                commitWriteBatchChannel);
+                commitWriteBatchChannel,
+                totalCapacityChangedChannel);
             partitioningActor.Run();
 
             // From these components, create the store object itself

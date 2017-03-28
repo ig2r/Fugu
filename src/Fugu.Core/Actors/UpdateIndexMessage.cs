@@ -11,8 +11,8 @@ namespace Fugu.Actors
             IReadOnlyList<KeyValuePair<byte[], IndexEntry>> indexUpdates,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
+            // Note that replyChannel is an optional parameter and may be null
             Guard.NotNull(indexUpdates, nameof(indexUpdates));
-            Guard.NotNull(replyChannel, nameof(replyChannel));
 
             Clock = clock;
             IndexUpdates = indexUpdates;

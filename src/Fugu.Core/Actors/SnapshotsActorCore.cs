@@ -30,8 +30,8 @@ namespace Fugu.Actors
 
         public async Task UpdateIndexAsync(StateVector clock, Index index, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
+            // replyChannel may be null
             Guard.NotNull(index, nameof(index));
-            Guard.NotNull(replyChannel, nameof(replyChannel));
 
             _clock = StateVector.Max(_clock, clock);
             _index = index;
@@ -44,7 +44,7 @@ namespace Fugu.Actors
                 await _oldestVisibleStateChangedChannel.SendAsync(_oldestVisibleState);
             }
 
-            replyChannel.SetResult(new VoidTaskResult());
+            replyChannel?.SetResult(new VoidTaskResult());
         }
 
         /// <summary>

@@ -10,8 +10,8 @@ namespace Fugu.Actors
             CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
+            // Note that replyChannel is an optional parameter and may be null
             Guard.NotNull(index, nameof(index));
-            Guard.NotNull(replyChannel, nameof(replyChannel));
 
             Clock = clock;
             Index = index;

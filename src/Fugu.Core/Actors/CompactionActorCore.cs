@@ -1,8 +1,10 @@
 ﻿using Fugu.Channels;
 using Fugu.Common;
+using Fugu.Format;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace Fugu.Actors
@@ -12,13 +14,33 @@ namespace Fugu.Actors
     /// </summary>
     public class CompactionActorCore
     {
+        private readonly ICompactionStrategy _compactionStrategy;
+        private readonly ITableFactory _tableFactory;
         private readonly Channel<EvictSegmentMessage> _evictSegmentChannel;
+        private readonly Channel<TotalCapacityChangedMessage> _totalCapacityChangedChannel;
         private readonly Dictionary<Segment, SegmentStats> _segmentStats = new Dictionary<Segment, SegmentStats>();
+        private readonly Channel<UpdateIndexMessage> _updateIndexChannel;
 
-        public CompactionActorCore(Channel<EvictSegmentMessage> evictSegmentChannel)
+        private StateVector _compactionThreshold;
+
+        public CompactionActorCore(
+            ICompactionStrategy compactionStrategy,
+            ITableFactory tableFactory,
+            Channel<EvictSegmentMessage> evictSegmentChannel,
+            Channel<TotalCapacityChangedMessage> totalCapacityChangedChannel,
+            Channel<UpdateIndexMessage> updateIndexChannel)
         {
+            Guard.NotNull(compactionStrategy, nameof(compactionStrategy));
+            Guard.NotNull(tableFactory, nameof(tableFactory));
             Guard.NotNull(evictSegmentChannel, nameof(evictSegmentChannel));
+            Guard.NotNull(totalCapacityChangedChannel, nameof(totalCapacityChangedChannel));
+            Guard.NotNull(updateIndexChannel, nameof(updateIndexChannel));
+
+            _compactionStrategy = compactionStrategy;
+            _tableFactory = tableFactory;
             _evictSegmentChannel = evictSegmentChannel;
+            _totalCapacityChangedChannel = totalCapacityChangedChannel;
+            _updateIndexChannel = updateIndexChannel;
         }
 
         public async Task OnSegmentSizesChangedAsync(
@@ -36,7 +58,106 @@ namespace Fugu.Actors
                 _segmentStats[key] = stats + change;
             }
 
-            // Look for segments that no longer hold any useful data and schedule them for eviction
+            // Schedule segments for eviction if they no longer hold useful data
+            await EvictEmptyImmutableSegmentsAsync(clock);
+
+            // If the given clock has not yet surpassed the bar set by a previous compaction, stop here
+            if (!(clock >= _compactionThreshold))
+            {
+                return;
+            }
+
+            // Check if we need to compact a range of segments
+            var compactableStats = _segmentStats
+                .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration)
+                .OrderBy(kvp => kvp.Key.MinGeneration)
+                .ToArray();
+
+            if (_compactionStrategy.TryGetRangeToCompact(compactableStats, out var range))
+            {
+                // Yes, we should compact. First off, update the "compaction threshold" clock so that we will not
+                // re-trigger another compaction until this one is visible in the index.
+                _compactionThreshold = clock.NextCompaction();
+
+                // Get items from index that need to go into the newly compacted segment
+                var minGeneration = compactableStats[range.offset].Key.MinGeneration;
+                var maxGeneration = compactableStats[range.offset + range.count - 1].Key.MaxGeneration;
+
+                var query = from kvp in index
+                            let segment = kvp.Value.Segment
+                            where minGeneration <= segment.MinGeneration && segment.MaxGeneration <= maxGeneration
+                            select kvp;
+                var changeCount = query.Count();
+
+                // Determine space required for the compacted table
+                var requiredCapacity = Marshal.SizeOf<TableHeaderRecord>() + Marshal.SizeOf<TableFooterRecord>() +
+                    Marshal.SizeOf<CommitHeaderRecord>() + Marshal.SizeOf<CommitFooterRecord>() +
+                    query.Select(Measure).Sum();
+
+                var outputTable = await _tableFactory.CreateTableAsync(requiredCapacity);
+                var outputSegment = new Segment(minGeneration, maxGeneration, outputTable);
+
+                using (var tableWriter = new TableWriter(outputTable.OutputStream))
+                {
+                    tableWriter.WriteTableHeader(minGeneration, maxGeneration);
+                    tableWriter.WriteCommitHeader(changeCount);
+
+                    // First pass: write put/tombstone keys
+                    foreach (var (key, indexEntry) in query)
+                    {
+                        switch (indexEntry)
+                        {
+                            case IndexEntry.Value value:
+                                tableWriter.WritePut(key, value.ValueLength);
+                                break;
+                            case IndexEntry.Tombstone tombstone:
+                                tableWriter.WriteTombstone(key);
+                                break;
+                            default:
+                                throw new NotSupportedException();
+                        }
+                    }
+
+                    // Second pass: write payload and assemble index updates
+                    var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>(changeCount);
+
+                    foreach (var (key, indexEntry) in query)
+                    {
+                        switch (indexEntry)
+                        {
+                            case IndexEntry.Value src:
+                                var valueEntry = new IndexEntry.Value(outputSegment, tableWriter.Position, src.ValueLength);
+                                indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
+
+                                // Copy data
+                                using (var inputStream = src.Segment.Table.GetInputStream(src.Offset, src.ValueLength))
+                                {
+                                    inputStream.CopyTo(tableWriter.OutputStream);
+                                }
+
+                                break;
+                            case IndexEntry.Tombstone _:
+                                var tombstoneEntry = new IndexEntry.Tombstone(outputSegment);
+                                indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, tombstoneEntry));
+                                break;
+                        }
+                    }
+
+                    // Finish output segment
+                    tableWriter.WriteCommitFooter();
+                    tableWriter.WriteTableFooter();
+
+                    // Notify environment
+                    await _totalCapacityChangedChannel.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity));
+
+                    var updateIndexMessage = new UpdateIndexMessage(_compactionThreshold, indexUpdates, null);
+                    await _updateIndexChannel.SendAsync(updateIndexMessage);
+                }
+            }
+        }
+
+        private Task EvictEmptyImmutableSegmentsAsync(StateVector clock)
+        {
             var emptySegments = _segmentStats
                 .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration && kvp.Value.LiveBytes == 0)
                 .Select(kvp => kvp.Key)
@@ -45,14 +166,39 @@ namespace Fugu.Actors
             foreach (var s in emptySegments)
             {
                 _segmentStats.Remove(s);
-                await _evictSegmentChannel.SendAsync(new EvictSegmentMessage(clock, s));
             }
 
-            // Check if we need to compact a range of segments
-            var compactableStats = _segmentStats
-                .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration)
-                .OrderBy(kvp => kvp.Key.MinGeneration)
-                .ToArray();
+            long deltaCapacity = 0;
+            var tasks = new List<Task>();
+
+            tasks.AddRange(emptySegments.Select(s =>
+            {
+                deltaCapacity -= s.Table.Capacity;
+                var msg = new EvictSegmentMessage(clock, s);
+                return _evictSegmentChannel.SendAsync(msg);
+            }));
+
+            if (deltaCapacity != 0)
+            {
+                tasks.Add(_totalCapacityChangedChannel.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)));
+            }
+
+            return Task.WhenAll(tasks);
+        }
+
+        private long Measure(KeyValuePair<byte[], IndexEntry> indexItem)
+        {
+            long size = indexItem.Key.Length;
+
+            switch (indexItem.Value)
+            {
+                case IndexEntry.Value value:
+                    return size + Marshal.SizeOf<PutRecord>() + value.ValueLength;
+                case IndexEntry.Tombstone tombstone:
+                    return size + Marshal.SizeOf<TombstoneRecord>();
+                default:
+                    throw new NotSupportedException();
+            }
         }
     }
 }
