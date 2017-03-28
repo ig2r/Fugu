@@ -11,7 +11,7 @@ namespace Fugu.Common
             {
                 throw string.IsNullOrEmpty(parameterName)
                     ? new ArgumentNullException()
-                    : new ArgumentNullException("parameterName");
+                    : new ArgumentNullException(parameterName);
             }
         }
     }
