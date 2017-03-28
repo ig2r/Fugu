@@ -1,5 +1,4 @@
-﻿using Fugu.Channels;
-using Fugu.Common;
+﻿using Fugu.Common;
 using System;
 using System.Collections.Generic;
 using System.Text;

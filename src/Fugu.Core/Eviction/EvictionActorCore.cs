@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Fugu.Common;
 
-namespace Fugu.Actors
+namespace Fugu.Eviction
 {
     public class EvictionActorCore
     {

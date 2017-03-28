@@ -1,7 +1,7 @@
 ﻿using Fugu.Common;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Writer
 {
     /// <summary>
     /// Instances of this actor build segments from incoming write batches by writing their data to the current

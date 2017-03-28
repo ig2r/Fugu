@@ -1,11 +1,11 @@
-﻿using Fugu.Channels;
+﻿using Fugu.Actors;
 using Fugu.Common;
 using Fugu.Format;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Writer
 {
     public sealed class WriterActorCore
     {

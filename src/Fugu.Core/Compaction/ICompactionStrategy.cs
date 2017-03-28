@@ -1,8 +1,9 @@
-﻿using System;
+﻿using Fugu.Actors;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Fugu.Actors
+namespace Fugu.Compaction
 {
     public interface ICompactionStrategy
     {

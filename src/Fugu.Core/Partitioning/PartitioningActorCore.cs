@@ -1,11 +1,11 @@
-﻿using Fugu.Channels;
+﻿using Fugu.Actors;
 using Fugu.Common;
 using Fugu.Format;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Partitioning
 {
     public class PartitioningActorCore
     {

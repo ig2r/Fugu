@@ -1,7 +1,12 @@
 ﻿using Fugu.Actors;
 using Fugu.Bootstrapping;
-using Fugu.Channels;
 using Fugu.Common;
+using Fugu.Compaction;
+using Fugu.Eviction;
+using Fugu.Index;
+using Fugu.Partitioning;
+using Fugu.Snapshots;
+using Fugu.Writer;
 using System;
 using System.Threading.Tasks;
 

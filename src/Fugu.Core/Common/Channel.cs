@@ -1,6 +1,6 @@
 ﻿using System.Threading.Tasks;
 
-namespace Fugu.Channels
+namespace Fugu.Common
 {
     public abstract class Channel<T>
     {

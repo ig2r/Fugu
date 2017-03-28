@@ -1,13 +1,12 @@
-﻿using Fugu.Channels;
-using Fugu.Common;
+﻿using Fugu.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
-using Index = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
+using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
-namespace Fugu.Actors
+namespace Fugu.Snapshots
 {
     /// <summary>
     /// Manages snapshots, which provide consumers an immutable, point-in-time view of the store's contents.
@@ -18,7 +17,7 @@ namespace Fugu.Actors
         private readonly HashSet<Snapshot> _activeSnapshots = new HashSet<Snapshot>();
 
         private StateVector _clock;
-        private Index _index = Index.Empty;
+        private CritBitIndex _index = CritBitIndex.Empty;
 
         private StateVector _oldestVisibleState = default(StateVector);
 
@@ -28,7 +27,7 @@ namespace Fugu.Actors
             _oldestVisibleStateChangedChannel = oldestVisibleStateChangedChannel;
         }
 
-        public async Task UpdateIndexAsync(StateVector clock, Index index, TaskCompletionSource<VoidTaskResult> replyChannel)
+        public async Task UpdateIndexAsync(StateVector clock, CritBitIndex index, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             // replyChannel may be null
             Guard.NotNull(index, nameof(index));

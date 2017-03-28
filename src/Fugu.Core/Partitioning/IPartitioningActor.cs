@@ -1,7 +1,7 @@
 ﻿using Fugu.Common;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Partitioning
 {
     /// <summary>
     /// Instances of this actor distribute incoming writes across segments. Each new segment is sized in proportion

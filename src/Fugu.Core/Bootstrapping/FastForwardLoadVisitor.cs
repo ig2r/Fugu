@@ -1,5 +1,4 @@
 ﻿using Fugu.Actors;
-using Fugu.Channels;
 using Fugu.Common;
 using System.Collections.Generic;
 using System.Linq;

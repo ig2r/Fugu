@@ -1,10 +1,8 @@
 ﻿using Fugu.Actors;
-using Fugu.Channels;
 using Fugu.Common;
 using Fugu.Format;
-using System;
+using Fugu.Index;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 

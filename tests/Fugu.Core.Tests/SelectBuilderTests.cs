@@ -1,5 +1,4 @@
-﻿using Fugu.Channels;
-using Fugu.Common;
+﻿using Fugu.Common;
 using System.Threading.Tasks;
 using Xunit;
 

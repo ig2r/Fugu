@@ -1,7 +1,6 @@
-﻿using Fugu.Channels;
-using Fugu.Common;
+﻿using Fugu.Common;
 
-namespace Fugu.Actors
+namespace Fugu.Eviction
 {
     public class EvictionActorShell
     {

@@ -1,5 +1,6 @@
-﻿using Fugu.Channels;
+﻿using Fugu.Actors;
 using Fugu.Common;
+using Fugu.Eviction;
 using Fugu.Format;
 using System;
 using System.Collections.Generic;
@@ -7,7 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Compaction
 {
     /// <summary>
     /// Monitors data distribution across segments in the store, and evicts/merges segments to retain balance.

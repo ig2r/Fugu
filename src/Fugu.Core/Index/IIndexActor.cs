@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Index
 {
     /// <summary>
     /// Instances of this actor maintain the store's master index.

@@ -1,4 +1,4 @@
-﻿namespace Fugu.Actors
+﻿namespace Fugu.Snapshots
 {
     public interface ISnapshotsActor
     {

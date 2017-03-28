@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Fugu.Channels
+namespace Fugu.Common
 {
     public class SelectBuilder
     {

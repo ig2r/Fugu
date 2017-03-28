@@ -1,10 +1,10 @@
-﻿using Fugu.Channels;
+﻿using Fugu.Actors;
 using Fugu.Common;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Index = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
+using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
-namespace Fugu.Actors
+namespace Fugu.Index
 {
     public class IndexActorCore
     {
@@ -17,7 +17,7 @@ namespace Fugu.Actors
         private StateVector _clock = new StateVector();
 
         // Current state of the master index for this store instance
-        private Index _index = Index.Empty;
+        private CritBitIndex _index = CritBitIndex.Empty;
 
         public IndexActorCore(
             Channel<SnapshotsUpdateMessage> snapshotsUpdateChannel,

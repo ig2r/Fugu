@@ -1,7 +1,7 @@
-﻿using Fugu.Channels;
+﻿using Fugu.Actors;
 using Fugu.Common;
 
-namespace Fugu.Actors
+namespace Fugu.Compaction
 {
     public class CompactionActorShell : ICompactionActor
     {

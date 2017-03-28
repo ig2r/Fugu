@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Fugu.Channels
+namespace Fugu.Common
 {
     // Semantics:
     // - senders and receivers are matched to facilitate data exchange

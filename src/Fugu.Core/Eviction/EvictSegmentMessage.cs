@@ -1,6 +1,6 @@
 ﻿using Fugu.Common;
 
-namespace Fugu.Actors
+namespace Fugu.Eviction
 {
     public struct EvictSegmentMessage
     {

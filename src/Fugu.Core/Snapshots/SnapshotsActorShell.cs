@@ -1,8 +1,8 @@
-﻿using Fugu.Channels;
+﻿using Fugu.Actors;
 using Fugu.Common;
 using System.Threading.Tasks;
 
-namespace Fugu.Actors
+namespace Fugu.Snapshots
 {
     public class SnapshotsActorShell : ISnapshotsActor
     {

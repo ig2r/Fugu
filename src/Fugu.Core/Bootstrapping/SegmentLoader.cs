@@ -1,7 +1,6 @@
 ﻿using Fugu.Actors;
-using Fugu.Channels;
 using Fugu.Common;
-using System.Collections.Generic;
+using Fugu.Index;
 using System.Threading.Tasks;
 
 namespace Fugu.Bootstrapping
