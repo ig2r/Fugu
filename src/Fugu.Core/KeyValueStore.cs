@@ -77,7 +77,7 @@ namespace Fugu
 
             var compactionActor = new CompactionActorShell(
                 new CompactionActorCore(
-                    new AlwaysCompactCompactionStrategy(),
+                    new VoidCompactionStrategy(),
                     tableSet,
                     evictSegmentChannel,
                     totalCapacityChangedChannel,
