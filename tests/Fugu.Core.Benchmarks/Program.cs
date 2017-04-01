@@ -3,6 +3,7 @@ using BenchmarkDotNet.Running;
 using Fugu.TableSets;
 using Microsoft.Extensions.Configuration;
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,7 +17,8 @@ namespace Fugu.Core.Benchmarks
                 .AddCommandLine(args)
                 .Build();
 
-            BenchmarkRunner.Run<BenchmarkSample>();
+            //BenchmarkRunner.Run<BenchmarkSample>();
+            new BenchmarkSample().Commit1000WriteBatches().Wait();
         }
     }
 
@@ -28,11 +30,27 @@ namespace Fugu.Core.Benchmarks
             var tableSet = new InMemoryTableSet();
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             {
-                for (int i = 0; i < 1000; i++)
+                var tasks = new List<Task>();
+                for (int i = 0; i < 16; i++)
                 {
-                    var writeBatch = new WriteBatch();
-                    writeBatch.Put(Encoding.UTF8.GetBytes($"key:{i}"), new byte[64]);
-                    await store.CommitAsync(writeBatch);
+                    tasks.Add(Task.Run(() => DoBatchAsync(store, 10000 / 16)));
+                }
+
+                await Task.WhenAll(tasks);
+            }
+        }
+
+        private async Task DoBatchAsync(KeyValueStore store, int n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                var writeBatch = new WriteBatch();
+                writeBatch.Put(Encoding.UTF8.GetBytes($"key:{i}"), new byte[64]);
+                await store.CommitAsync(writeBatch);
+
+                if (i % 10 == 0)
+                {
+                    await Task.Yield();
                 }
             }
         }
