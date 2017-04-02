@@ -57,12 +57,12 @@ namespace Fugu
             var updateIndexChannel = new UnboundedChannel<UpdateIndexMessage>();
             var snapshotsUpdateChannel = new UnboundedChannel<SnapshotsUpdateMessage>();
             var getSnapshotChannel = new UnboundedChannel<TaskCompletionSource<Snapshot>>();
-            var writeChannel = new UnboundedChannel<CommitWriteBatchToSegmentMessage>();
+            var writeChannel = new UnbufferedChannel<CommitWriteBatchToSegmentMessage>();
             var commitWriteBatchChannel = new UnboundedChannel<CommitWriteBatchMessage>();
             var totalCapacityChangedChannel = new UnboundedChannel<TotalCapacityChangedMessage>();
-            var segmentSizesChangedChannel = new UnboundedChannel<SegmentSizesChangedMessage>();
-            var evictSegmentChannel = new UnboundedChannel<EvictSegmentMessage>();
-            var oldestVisibleStateChangedChannel = new UnboundedChannel<StateVector>();
+            var segmentSizesChangedChannel = new UnbufferedChannel<SegmentSizesChangedMessage>();
+            var evictSegmentChannel = new UnbufferedChannel<EvictSegmentMessage>();
+            var oldestVisibleStateChangedChannel = new UnbufferedChannel<StateVector>();
 
             // Create actors managing store state
             var snapshotsActor = new SnapshotsActorShell(

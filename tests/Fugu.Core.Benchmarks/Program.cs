@@ -20,6 +20,7 @@ namespace Fugu.Core.Benchmarks
                 .Build();
 
             BenchmarkRunner.Run<SimpleCommitBenchmark>();
+            //new SimpleCommitBenchmark { DegreeOfConcurrency = 1 }.Commit1000Batches().Wait();
         }
     }
 
