@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Fugu.Common
@@ -13,20 +9,47 @@ namespace Fugu.Common
     // - only one receiver
     public sealed class UnbufferedChannel<T> : Channel<T>
     {
-        private readonly SemaphoreSlim _receiverCount = new SemaphoreSlim(0, 1);
-        private AsyncValueTaskMethodBuilder<T> _blockedReceiver;
+        private readonly object _sync = new object();
+        private readonly Queue<(TaskCompletionSource<VoidTaskResult> tcs, T item)> _blockedSenders =
+            new Queue<(TaskCompletionSource<VoidTaskResult> tcs, T item)>();
+        private TaskCompletionSource<T> _blockedReceiver;
 
-        public override async Task SendAsync(T item)
+        public override Task SendAsync(T item)
         {
-            await _receiverCount.WaitAsync().ConfigureAwait(false);
-            _blockedReceiver.SetResult(item);
+            TaskCompletionSource<T> blockedReceiver;
+            lock (_sync)
+            {
+                if (_blockedReceiver == null)
+                {
+                    var blockedSender = (tcs: new TaskCompletionSource<VoidTaskResult>(), item: item);
+                    _blockedSenders.Enqueue(blockedSender);
+                    return blockedSender.tcs.Task;
+                }
+
+                blockedReceiver = _blockedReceiver;
+                _blockedReceiver = null;
+            }
+
+            blockedReceiver.SetResult(item);
+            return Task.CompletedTask;
         }
 
         public override ValueTask<T> ReceiveAsync()
         {
-            _blockedReceiver = AsyncValueTaskMethodBuilder<T>.Create();
-            _receiverCount.Release();
-            return _blockedReceiver.Task;
+            (TaskCompletionSource<VoidTaskResult> tcs, T item) blockedSender;
+            lock (_sync)
+            {
+                if (_blockedSenders.Count == 0)
+                {
+                    _blockedReceiver = new TaskCompletionSource<T>();
+                    return new ValueTask<T>(_blockedReceiver.Task);
+                }
+
+                blockedSender = _blockedSenders.Dequeue();
+            }
+
+            blockedSender.tcs.SetResult(default(VoidTaskResult));
+            return new ValueTask<T>(blockedSender.item);
         }
     }
 }
