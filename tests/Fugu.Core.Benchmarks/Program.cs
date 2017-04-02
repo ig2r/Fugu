@@ -3,7 +3,9 @@ using BenchmarkDotNet.Running;
 using Fugu.TableSets;
 using Microsoft.Extensions.Configuration;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -17,41 +19,42 @@ namespace Fugu.Core.Benchmarks
                 .AddCommandLine(args)
                 .Build();
 
-            //BenchmarkRunner.Run<BenchmarkSample>();
-            new BenchmarkSample().Commit1000WriteBatches().Wait();
+            BenchmarkRunner.Run<SimpleCommitBenchmark>();
         }
     }
 
-    public class BenchmarkSample
+    //[MemoryDiagnoser]
+    public class SimpleCommitBenchmark
     {
+        public int Iterations { get; set; } = 1000;
+
+        [Params(1, 2, 16)]
+        public int DegreeOfConcurrency { get; set; }
+
         [Benchmark]
-        public async Task Commit1000WriteBatches()
+        public async Task Commit1000Batches()
         {
+            var iterationsPerSlice = Iterations / DegreeOfConcurrency;
+
             var tableSet = new InMemoryTableSet();
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             {
-                var tasks = new List<Task>();
-                for (int i = 0; i < 16; i++)
-                {
-                    tasks.Add(Task.Run(() => DoBatchAsync(store, 10000 / 16)));
-                }
+                var tasks = from i in Enumerable.Range(0, DegreeOfConcurrency)
+                            let iteration = i
+                            select Task.Run(async () =>
+                            {
+                                var data = new byte[64];
+                                var offset = iteration * iterationsPerSlice;
 
-                await Task.WhenAll(tasks);
-            }
-        }
+                                for (int i = 0; i < iterationsPerSlice; i++)
+                                {
+                                    var writeBatch = new WriteBatch();
+                                    writeBatch.Put(Encoding.UTF8.GetBytes($"key:{offset + i}"), data);
+                                    await store.CommitAsync(writeBatch);
+                                }
+                            });
 
-        private async Task DoBatchAsync(KeyValueStore store, int n)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                var writeBatch = new WriteBatch();
-                writeBatch.Put(Encoding.UTF8.GetBytes($"key:{i}"), new byte[64]);
-                await store.CommitAsync(writeBatch);
-
-                if (i % 10 == 0)
-                {
-                    await Task.Yield();
-                }
+                await Task.WhenAll(tasks.ToArray());
             }
         }
     }

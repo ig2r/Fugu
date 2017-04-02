@@ -54,15 +54,15 @@ namespace Fugu
             Guard.NotNull(tableSet, nameof(tableSet));
 
             // Create channels that will transmit messages between actors
-            var updateIndexChannel = new UnbufferedChannel<UpdateIndexMessage>();
-            var snapshotsUpdateChannel = new UnbufferedChannel<SnapshotsUpdateMessage>();
-            var getSnapshotChannel = new UnbufferedChannel<TaskCompletionSource<Snapshot>>();
-            var writeChannel = new UnbufferedChannel<CommitWriteBatchToSegmentMessage>();
-            var commitWriteBatchChannel = new UnbufferedChannel<CommitWriteBatchMessage>();
-            var totalCapacityChangedChannel = new UnbufferedChannel<TotalCapacityChangedMessage>();
-            var segmentSizesChangedChannel = new UnbufferedChannel<SegmentSizesChangedMessage>();
-            var evictSegmentChannel = new UnbufferedChannel<EvictSegmentMessage>();
-            var oldestVisibleStateChangedChannel = new UnbufferedChannel<StateVector>();
+            var updateIndexChannel = new UnboundedChannel<UpdateIndexMessage>();
+            var snapshotsUpdateChannel = new UnboundedChannel<SnapshotsUpdateMessage>();
+            var getSnapshotChannel = new UnboundedChannel<TaskCompletionSource<Snapshot>>();
+            var writeChannel = new UnboundedChannel<CommitWriteBatchToSegmentMessage>();
+            var commitWriteBatchChannel = new UnboundedChannel<CommitWriteBatchMessage>();
+            var totalCapacityChangedChannel = new UnboundedChannel<TotalCapacityChangedMessage>();
+            var segmentSizesChangedChannel = new UnboundedChannel<SegmentSizesChangedMessage>();
+            var evictSegmentChannel = new UnboundedChannel<EvictSegmentMessage>();
+            var oldestVisibleStateChangedChannel = new UnboundedChannel<StateVector>();
 
             // Create actors managing store state
             var snapshotsActor = new SnapshotsActorShell(
@@ -77,8 +77,8 @@ namespace Fugu
 
             var compactionActor = new CompactionActorShell(
                 new CompactionActorCore(
-                    //new VoidCompactionStrategy(),
-                    new AlwaysCompactCompactionStrategy(),
+                    new VoidCompactionStrategy(),
+                    //new AlwaysCompactCompactionStrategy(),
                     tableSet,
                     evictSegmentChannel,
                     totalCapacityChangedChannel,
