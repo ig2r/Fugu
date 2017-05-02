@@ -1,6 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
 using Fugu.TableSets;
-using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,15 +9,15 @@ namespace Fugu.Core.Benchmarks
     //[MemoryDiagnoser]
     public class SimpleCommitBenchmark
     {
-        public int Iterations { get; } = 1000;
+        public const int ITERATIONS = 1000;
 
         [Params(1, 2, 16)]
         public int DegreeOfConcurrency { get; set; }
 
-        [Benchmark(OperationsPerInvoke = 1000)]
-        public async Task Commit1000Batches()
+        [Benchmark(OperationsPerInvoke = ITERATIONS)]
+        public async Task CommitBatches()
         {
-            var iterationsPerSlice = Iterations / DegreeOfConcurrency;
+            var iterationsPerSlice = ITERATIONS / DegreeOfConcurrency;
 
             var tableSet = new InMemoryTableSet();
             using (var store = await KeyValueStore.CreateAsync(tableSet))
@@ -33,13 +32,18 @@ namespace Fugu.Core.Benchmarks
                                 for (int i = 0; i < iterationsPerSlice; i++)
                                 {
                                     var writeBatch = new WriteBatch();
-                                    writeBatch.Put(Encoding.UTF8.GetBytes($"key:{offset + i}"), data);
+                                    writeBatch.Put(GetKey(offset + i), data);
                                     await store.CommitAsync(writeBatch);
                                 }
                             });
 
                 await Task.WhenAll(tasks.ToArray());
             }
+        }
+
+        private static byte[] GetKey(int index)
+        {
+            return Encoding.UTF8.GetBytes("key:" + index);
         }
     }
 }
