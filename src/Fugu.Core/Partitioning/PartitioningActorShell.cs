@@ -1,34 +1,29 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Partitioning
 {
     public class PartitioningActorShell : IPartitioningActor
     {
-        private readonly PartitioningActorCore _core;
-        private readonly Channel<CommitWriteBatchMessage> _commitWriteBatchChannel;
-        private readonly Channel<TotalCapacityChangedMessage> _totalCapacityChangedChannel;
-
-        public PartitioningActorShell(
-            PartitioningActorCore core,
-            Channel<CommitWriteBatchMessage> commitWriteBatchChannel,
-            Channel<TotalCapacityChangedMessage> totalCapacityChangedChannel)
+        public PartitioningActorShell(PartitioningActorCore core)
         {
             Guard.NotNull(core, nameof(core));
-            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
-            Guard.NotNull(totalCapacityChangedChannel, nameof(totalCapacityChangedChannel));
 
-            _core = core;
-            _commitWriteBatchChannel = commitWriteBatchChannel;
-            _totalCapacityChangedChannel = totalCapacityChangedChannel;
+            var scheduler = new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
+
+            // Unconstrained because KeyValueStore will post to it
+            CommitWriteBatchBlock = new ActionBlock<CommitWriteBatchMessage>(
+                msg => core.CommitAsync(msg.WriteBatch, msg.ReplyChannel),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler });
+
+            TotalCapacityChangedBlock = new ActionBlock<TotalCapacityChangedMessage>(
+                msg => core.OnTotalCapacityChanged(msg.DeltaCapacity),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler, BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
         }
 
-        public async void Run()
-        {
-            await new SelectBuilder()
-                .Case(_commitWriteBatchChannel, msg => _core.CommitAsync(msg.WriteBatch, msg.ReplyChannel))
-                .Case(_totalCapacityChangedChannel, msg => _core.OnTotalCapacityChangedAsync(msg.DeltaCapacity))
-                .SelectAsync(_ => true);
-        }
+        public ITargetBlock<CommitWriteBatchMessage> CommitWriteBatchBlock { get; }
+        public ITargetBlock<TotalCapacityChangedMessage> TotalCapacityChangedBlock { get; }
     }
 }

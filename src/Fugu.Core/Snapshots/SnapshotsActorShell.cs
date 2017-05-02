@@ -1,54 +1,46 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Snapshots
 {
     public class SnapshotsActorShell : ISnapshotsActor
     {
-        private readonly SnapshotsActorCore _core;
-        private readonly Channel<SnapshotsUpdateMessage> _snapshotsUpdateChannel;
-        private readonly Channel<TaskCompletionSource<Snapshot>> _getSnapshotChannel;
-        private readonly Channel<Snapshot> _snapshotDisposedChannel;
+        private readonly ActionBlock<Snapshot> _snapshotDisposedBlock;
 
-        public SnapshotsActorShell(
-            SnapshotsActorCore core,
-            Channel<SnapshotsUpdateMessage> snapshotsUpdateChannel,
-            Channel<TaskCompletionSource<Snapshot>> getSnapshotChannel)
+        public SnapshotsActorShell(SnapshotsActorCore core)
         {
             Guard.NotNull(core, nameof(core));
-            Guard.NotNull(snapshotsUpdateChannel, nameof(snapshotsUpdateChannel));
-            Guard.NotNull(getSnapshotChannel, nameof(getSnapshotChannel));
 
-            _core = core;
-            _snapshotsUpdateChannel = snapshotsUpdateChannel;
-            _getSnapshotChannel = getSnapshotChannel;
-            _snapshotDisposedChannel = new UnbufferedChannel<Snapshot>();
-        }
+            var scheduler = new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
+            SnapshotsUpdateBlock = new ActionBlock<SnapshotsUpdateMessage>(
+                msg => core.UpdateIndexAsync(msg.Clock, msg.Index, msg.ReplyChannel),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler, BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
 
-        public async void Run()
-        {
-            await new SelectBuilder()
-                .Case(_snapshotsUpdateChannel, msg =>
+            // Unconstrained because KeyValueStore will post to it
+            GetSnapshotBlock = new ActionBlock<TaskCompletionSource<Snapshot>>(
+                replyChannel =>
                 {
-                    return _core.UpdateIndexAsync(msg.Clock, msg.Index, msg.ReplyChannel);
-                })
-                .Case(_getSnapshotChannel, replyChannel =>
-                {
-                    var snapshot = _core.GetSnapshot(OnSnapshotDisposed);
+                    var snapshot = core.GetSnapshot(OnSnapshotDisposed);
                     replyChannel.SetResult(snapshot);
-                    return Task.CompletedTask;
-                })
-                .Case(_snapshotDisposedChannel, snapshot =>
-                {
-                    return _core.OnSnapshotDisposedAsync(snapshot);
-                })
-                .SelectAsync(_ => true);
+                },
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler });
+
+            // Unconstrained because OnSnapshotDisposed will post to it
+            _snapshotDisposedBlock = new ActionBlock<Snapshot>(
+                snapshot => core.OnSnapshotDisposedAsync(snapshot),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler });
         }
+
+        public ITargetBlock<SnapshotsUpdateMessage> SnapshotsUpdateBlock { get; }
+        public ITargetBlock<TaskCompletionSource<Snapshot>> GetSnapshotBlock { get; }
 
         private void OnSnapshotDisposed(Snapshot snapshot)
         {
-            _snapshotDisposedChannel.SendAsync(snapshot);
+            var accepted = _snapshotDisposedBlock.Post(snapshot);
+            Debug.Assert(accepted, "Posting a snapshot disposal message must always succeed.");
         }
     }
 }

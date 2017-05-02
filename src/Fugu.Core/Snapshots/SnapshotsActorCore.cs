@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
 namespace Fugu.Snapshots
@@ -13,7 +14,7 @@ namespace Fugu.Snapshots
     /// </summary>
     public class SnapshotsActorCore
     {
-        private readonly Channel<StateVector> _oldestVisibleStateChangedChannel;
+        private readonly ITargetBlock<StateVector> _oldestVisibleStateChangedBlock;
         private readonly HashSet<Snapshot> _activeSnapshots = new HashSet<Snapshot>();
 
         private StateVector _clock;
@@ -21,13 +22,13 @@ namespace Fugu.Snapshots
 
         private StateVector _oldestVisibleState = default(StateVector);
 
-        public SnapshotsActorCore(Channel<StateVector> oldestVisibleStateChangedChannel)
+        public SnapshotsActorCore(ITargetBlock<StateVector> oldestVisibleStateChangedBlock)
         {
-            Guard.NotNull(oldestVisibleStateChangedChannel, nameof(oldestVisibleStateChangedChannel));
-            _oldestVisibleStateChangedChannel = oldestVisibleStateChangedChannel;
+            Guard.NotNull(oldestVisibleStateChangedBlock, nameof(oldestVisibleStateChangedBlock));
+            _oldestVisibleStateChangedBlock = oldestVisibleStateChangedBlock;
         }
 
-        public async Task UpdateIndexAsync(StateVector clock, CritBitIndex index, TaskCompletionSource<VoidTaskResult> replyChannel)
+        public Task UpdateIndexAsync(StateVector clock, CritBitIndex index, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             // replyChannel may be null
             Guard.NotNull(index, nameof(index));
@@ -35,15 +36,17 @@ namespace Fugu.Snapshots
             _clock = StateVector.Max(_clock, clock);
             _index = index;
 
+            replyChannel?.SetResult(new VoidTaskResult());
+
             // If no snapshot is currently active, this is now effectively the oldest state that could potentially ever be
             // retained by a snapshot now, so notify dependent actors accordingly
             if (_activeSnapshots.Count == 0)
             {
                 _oldestVisibleState = _clock;
-                await _oldestVisibleStateChangedChannel.SendAsync(_oldestVisibleState);
+                return _oldestVisibleStateChangedBlock.SendAsync(_oldestVisibleState);
             }
 
-            replyChannel?.SetResult(new VoidTaskResult());
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -58,7 +61,7 @@ namespace Fugu.Snapshots
             return snapshot;
         }
 
-        public async Task OnSnapshotDisposedAsync(Snapshot snapshot)
+        public Task OnSnapshotDisposedAsync(Snapshot snapshot)
         {
             if (_activeSnapshots.Remove(snapshot) && snapshot.Clock == _oldestVisibleState)
             {
@@ -72,9 +75,11 @@ namespace Fugu.Snapshots
                 if (oldestNow != _oldestVisibleState)
                 {
                     _oldestVisibleState = oldestNow;
-                    await _oldestVisibleStateChangedChannel.SendAsync(_oldestVisibleState);
+                    return _oldestVisibleStateChangedBlock.SendAsync(_oldestVisibleState);
                 }
             }
+
+            return Task.CompletedTask;
         }
     }
 }

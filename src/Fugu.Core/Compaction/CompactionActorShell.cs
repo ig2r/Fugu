@@ -1,29 +1,20 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Compaction
 {
     public class CompactionActorShell : ICompactionActor
     {
-        private readonly CompactionActorCore _core;
-        private readonly Channel<SegmentSizesChangedMessage> _indexUpdatedChannel;
-
-        public CompactionActorShell(
-            CompactionActorCore core,
-            Channel<SegmentSizesChangedMessage> indexUpdatedChannel)
+        public CompactionActorShell(CompactionActorCore core)
         {
             Guard.NotNull(core, nameof(core));
-            Guard.NotNull(indexUpdatedChannel, nameof(indexUpdatedChannel));
 
-            _core = core;
-            _indexUpdatedChannel = indexUpdatedChannel;
+            // Unbounded input -- needs to be throttled within sender, i.e., index actor
+            SegmentSizesChangedBlock = new ActionBlock<SegmentSizesChangedMessage>(msg =>
+                core.OnSegmentSizesChangedAsync(msg.Clock, msg.SizeChanges, msg.Index));
         }
 
-        public async void Run()
-        {
-            await new SelectBuilder()
-                .Case(_indexUpdatedChannel, msg => _core.OnSegmentSizesChangedAsync(msg.Clock, msg.SizeChanges, msg.Index))
-                .SelectAsync(_ => true);
-        }
+        public ITargetBlock<SegmentSizesChangedMessage> SegmentSizesChangedBlock { get; }
     }
 }

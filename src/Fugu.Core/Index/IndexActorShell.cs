@@ -1,30 +1,19 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
-using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Index
 {
     public class IndexActorShell : IIndexActor
     {
-        private readonly IndexActorCore _core;
-        private readonly Channel<UpdateIndexMessage> _updateIndexChannel;
-
-        public IndexActorShell(IndexActorCore core, Channel<UpdateIndexMessage> updateIndexChannel)
+        public IndexActorShell(IndexActorCore core)
         {
             Guard.NotNull(core, nameof(core));
-            _core = core;
-            _updateIndexChannel = updateIndexChannel;
+            UpdateIndexBlock = new ActionBlock<UpdateIndexMessage>(
+                msg => core.UpdateIndexAsync(msg.Clock, msg.IndexUpdates, msg.ReplyChannel),
+                new ExecutionDataflowBlockOptions { BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
         }
 
-        public async void Run()
-        {
-            await new SelectBuilder()
-                .Case(_updateIndexChannel, msg =>
-                {
-                    _core.UpdateIndex(msg.Clock, msg.IndexUpdates, msg.ReplyChannel);
-                    return Task.CompletedTask;
-                })
-                .SelectAsync(_ => true);
-        }
+        public ITargetBlock<UpdateIndexMessage> UpdateIndexBlock { get; }
     }
 }

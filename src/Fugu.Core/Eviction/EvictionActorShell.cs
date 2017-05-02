@@ -1,33 +1,25 @@
 ﻿using Fugu.Common;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Eviction
 {
     public class EvictionActorShell
     {
-        private readonly EvictionActorCore _core;
-        private readonly Channel<EvictSegmentMessage> _evictSegmentChannel;
-        private readonly Channel<StateVector> _oldestVisibleStateChangedChannel;
-
-        public EvictionActorShell(
-            EvictionActorCore core,
-            Channel<EvictSegmentMessage> evictSegmentChannel,
-            Channel<StateVector> oldestVisibleStateChangedChannel)
+        public EvictionActorShell(EvictionActorCore core)
         {
             Guard.NotNull(core, nameof(core));
-            Guard.NotNull(evictSegmentChannel, nameof(evictSegmentChannel));
-            Guard.NotNull(oldestVisibleStateChangedChannel, nameof(oldestVisibleStateChangedChannel));
 
-            _core = core;
-            _evictSegmentChannel = evictSegmentChannel;
-            _oldestVisibleStateChangedChannel = oldestVisibleStateChangedChannel;
+            var scheduler = new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
+            EvictSegmentBlock = new ActionBlock<EvictSegmentMessage>(
+                msg => core.EvictSegmentAsync(msg.EvictAt, msg.Segment),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler, BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
+            OldestVisibleStateChangedBlock = new ActionBlock<StateVector>(
+                clock => core.OnOldestVisibleStateChangedAsync(clock),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler, BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
         }
 
-        public async void Run()
-        {
-            await new SelectBuilder()
-                .Case(_evictSegmentChannel, msg => _core.EvictSegmentAsync(msg.EvictAt, msg.Segment))
-                .Case(_oldestVisibleStateChangedChannel, clock => _core.OnOldestVisibleStateChangedAsync(clock))
-                .SelectAsync(_ => true);
-        }
+        public ITargetBlock<EvictSegmentMessage> EvictSegmentBlock { get; }
+        public ITargetBlock<StateVector> OldestVisibleStateChangedBlock { get; }
     }
 }

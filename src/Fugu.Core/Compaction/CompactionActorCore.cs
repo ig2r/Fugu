@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Compaction
 {
@@ -17,31 +18,31 @@ namespace Fugu.Compaction
     {
         private readonly ICompactionStrategy _compactionStrategy;
         private readonly ITableFactory _tableFactory;
-        private readonly Channel<EvictSegmentMessage> _evictSegmentChannel;
-        private readonly Channel<TotalCapacityChangedMessage> _totalCapacityChangedChannel;
+        private readonly ITargetBlock<EvictSegmentMessage> _evictSegmentBlock;
+        private readonly ITargetBlock<TotalCapacityChangedMessage> _totalCapacityChangedBlock;
         private readonly Dictionary<Segment, SegmentStats> _segmentStats = new Dictionary<Segment, SegmentStats>();
-        private readonly Channel<UpdateIndexMessage> _updateIndexChannel;
+        private readonly ITargetBlock<UpdateIndexMessage> _updateIndexBlock;
 
         private StateVector _compactionThreshold;
 
         public CompactionActorCore(
             ICompactionStrategy compactionStrategy,
             ITableFactory tableFactory,
-            Channel<EvictSegmentMessage> evictSegmentChannel,
-            Channel<TotalCapacityChangedMessage> totalCapacityChangedChannel,
-            Channel<UpdateIndexMessage> updateIndexChannel)
+            ITargetBlock<EvictSegmentMessage> evictSegmentBlock,
+            ITargetBlock<TotalCapacityChangedMessage> totalCapacityChangedBlock,
+            ITargetBlock<UpdateIndexMessage> updateIndexBlock)
         {
             Guard.NotNull(compactionStrategy, nameof(compactionStrategy));
             Guard.NotNull(tableFactory, nameof(tableFactory));
-            Guard.NotNull(evictSegmentChannel, nameof(evictSegmentChannel));
-            Guard.NotNull(totalCapacityChangedChannel, nameof(totalCapacityChangedChannel));
-            Guard.NotNull(updateIndexChannel, nameof(updateIndexChannel));
+            Guard.NotNull(evictSegmentBlock, nameof(evictSegmentBlock));
+            Guard.NotNull(totalCapacityChangedBlock, nameof(totalCapacityChangedBlock));
+            Guard.NotNull(updateIndexBlock, nameof(updateIndexBlock));
 
             _compactionStrategy = compactionStrategy;
             _tableFactory = tableFactory;
-            _evictSegmentChannel = evictSegmentChannel;
-            _totalCapacityChangedChannel = totalCapacityChangedChannel;
-            _updateIndexChannel = updateIndexChannel;
+            _evictSegmentBlock = evictSegmentBlock;
+            _totalCapacityChangedBlock = totalCapacityChangedBlock;
+            _updateIndexBlock = updateIndexBlock;
         }
 
         public async Task OnSegmentSizesChangedAsync(
@@ -60,7 +61,7 @@ namespace Fugu.Compaction
             }
 
             // Schedule segments for eviction if they no longer hold useful data
-            await EvictEmptyImmutableSegmentsAsync(clock);
+            await EvictEmptyImmutableSegmentsAsync(clock).ConfigureAwait(false);
 
             // If the given clock has not yet surpassed the bar set by a previous compaction, stop here
             if (!(clock >= _compactionThreshold))
@@ -95,7 +96,7 @@ namespace Fugu.Compaction
                     Marshal.SizeOf<CommitHeaderRecord>() + Marshal.SizeOf<CommitFooterRecord>() +
                     query.Select(Measure).Sum();
 
-                var outputTable = await _tableFactory.CreateTableAsync(requiredCapacity);
+                var outputTable = await _tableFactory.CreateTableAsync(requiredCapacity).ConfigureAwait(false);
                 var outputSegment = new Segment(minGeneration, maxGeneration, outputTable);
 
                 using (var tableWriter = new TableWriter(outputTable.OutputStream))
@@ -149,10 +150,10 @@ namespace Fugu.Compaction
                     tableWriter.WriteTableFooter();
 
                     // Notify environment
-                    await _totalCapacityChangedChannel.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity));
+                    await _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity)).ConfigureAwait(false);
 
                     var updateIndexMessage = new UpdateIndexMessage(_compactionThreshold, indexUpdates, null);
-                    await _updateIndexChannel.SendAsync(updateIndexMessage);
+                    await _updateIndexBlock.SendAsync(updateIndexMessage).ConfigureAwait(false);
                 }
             }
         }
@@ -176,12 +177,12 @@ namespace Fugu.Compaction
             {
                 deltaCapacity -= s.Table.Capacity;
                 var msg = new EvictSegmentMessage(clock, s);
-                return _evictSegmentChannel.SendAsync(msg);
+                return _evictSegmentBlock.SendAsync(msg);
             }));
 
             if (deltaCapacity != 0)
             {
-                tasks.Add(_totalCapacityChangedChannel.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)));
+                tasks.Add(_totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)));
             }
 
             return Task.WhenAll(tasks);

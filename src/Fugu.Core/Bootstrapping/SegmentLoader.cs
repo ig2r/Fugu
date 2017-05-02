@@ -2,24 +2,22 @@
 using Fugu.Common;
 using Fugu.Index;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Bootstrapping
 {
     public class SegmentLoader : ISegmentLoader
     {
         private readonly TableParser _parser;
-        private readonly IIndexActor _indexActor;
-        private readonly Channel<UpdateIndexMessage> _indexUpdateChannel;
+        private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
 
-        public SegmentLoader(TableParser parser, IIndexActor indexActor, Channel<UpdateIndexMessage> indexUpdateChannel)
+        public SegmentLoader(TableParser parser, ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
             Guard.NotNull(parser, nameof(parser));
-            Guard.NotNull(indexActor, nameof(indexActor));
-            Guard.NotNull(indexUpdateChannel, nameof(indexUpdateChannel));
+            Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
 
             _parser = parser;
-            _indexActor = indexActor;
-            _indexUpdateChannel = indexUpdateChannel;
+            _indexUpdateBlock = indexUpdateBlock;
         }
 
         #region ISegmentLoader
@@ -38,7 +36,7 @@ namespace Fugu.Bootstrapping
             Guard.NotNull(segment, nameof(segment));
 
             // TODO: use different parsing strategy based on whether checksums need to be verified
-            var visitor = new FastForwardLoadVisitor(segment, _indexUpdateChannel);
+            var visitor = new FastForwardLoadVisitor(segment, _indexUpdateBlock);
             var parseTask = _parser.ParseAsync(segment.Table, visitor);
             return Task.WhenAll(parseTask, visitor.Completion);
         }

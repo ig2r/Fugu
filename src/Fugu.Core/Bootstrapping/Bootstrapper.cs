@@ -5,6 +5,7 @@ using Fugu.Index;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Bootstrapping
 {
@@ -13,18 +14,17 @@ namespace Fugu.Bootstrapping
     /// </summary>
     public class Bootstrapper
     {
-        public async Task<BootstrapperResult> RunAsync(ITableSet tableSet, IIndexActor indexActor, Channel<UpdateIndexMessage> indexUpdateChannel)
+        public async Task<BootstrapperResult> RunAsync(ITableSet tableSet, ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
             Guard.NotNull(tableSet, nameof(tableSet));
-            Guard.NotNull(indexActor, nameof(indexActor));
-            Guard.NotNull(indexUpdateChannel, nameof(indexUpdateChannel));
+            Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
 
             // Walk through tables in table set and try to load segment metadata
             var tables = await tableSet.GetTablesAsync();
             var availableSegments = await GetAvailableSegmentsAsync(tables);
 
             var loadStrategy = new SegmentLoadStrategy();
-            var tableLoader = new SegmentLoader(new TableParser(), indexActor, indexUpdateChannel);
+            var tableLoader = new SegmentLoader(new TableParser(), indexUpdateBlock);
 
             var loadedSegments = await loadStrategy.RunAsync(availableSegments, tableLoader);
 
