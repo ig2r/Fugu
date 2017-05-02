@@ -1,27 +1,20 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Writer
 {
     public class WriterActorShell : IWriterActor
     {
-        private readonly WriterActorCore _core;
-        private readonly Channel<CommitWriteBatchToSegmentMessage> _commitWriteBatchChannel;
-
-        public WriterActorShell(WriterActorCore core, Channel<CommitWriteBatchToSegmentMessage> commitWriteBatchChannel)
+        public WriterActorShell(WriterActorCore core)
         {
             Guard.NotNull(core, nameof(core));
-            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
 
-            _core = core;
-            _commitWriteBatchChannel = commitWriteBatchChannel;
+            WriteBlock = new ActionBlock<WriteToSegmentMessage>(
+                msg => core.WriteAsync(msg.Clock, msg.WriteBatch, msg.OutputTable, msg.ReplyChannel),
+                new ExecutionDataflowBlockOptions { BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
         }
 
-        public async void Run()
-        {
-            await new SelectBuilder()
-                .Case(_commitWriteBatchChannel, msg => _core.CommitAsync(msg.Clock, msg.WriteBatch, msg.OutputTable, msg.ReplyChannel))
-                .SelectAsync(_ => true);
-        }
+        public ITargetBlock<WriteToSegmentMessage> WriteBlock { get; }
     }
 }

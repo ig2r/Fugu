@@ -4,6 +4,7 @@ using Fugu.Format;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Partitioning
 {
@@ -14,8 +15,8 @@ namespace Fugu.Partitioning
         private readonly long _tableHeaderSize;
         private readonly long _tableFooterSize;
 
-        private readonly Channel<CommitWriteBatchToSegmentMessage> _commitWriteBatchChannel;
         private readonly ITableFactory _tableFactory;
+        private readonly ITargetBlock<WriteToSegmentMessage> _writeBlock;
 
         private StateVector _clock = new StateVector();
 
@@ -29,13 +30,13 @@ namespace Fugu.Partitioning
         // the capacity of new output tables, as we aim to make output tables larger as the table set grows.
         private long _totalCapacity = 0;
 
-        public PartitioningActorCore(ITableFactory tableFactory, Channel<CommitWriteBatchToSegmentMessage> commitWriteBatchChannel)
+        public PartitioningActorCore(ITableFactory tableFactory, ITargetBlock<WriteToSegmentMessage> writeBlock)
         {
             Guard.NotNull(tableFactory, nameof(tableFactory));
-            Guard.NotNull(commitWriteBatchChannel, nameof(commitWriteBatchChannel));
+            Guard.NotNull(writeBlock, nameof(writeBlock));
 
             _tableFactory = tableFactory;
-            _commitWriteBatchChannel = commitWriteBatchChannel;
+            _writeBlock = writeBlock;
 
             _tableHeaderSize = Marshal.SizeOf<TableHeaderRecord>();
             _tableFooterSize = Marshal.SizeOf<TableFooterRecord>();
@@ -51,21 +52,29 @@ namespace Fugu.Partitioning
             // no output segment at all, determine requested size and tell writer actor to start a new segment
             if (_spaceLeftInOutputTable < requiredSpace + _tableFooterSize)
             {
-                // TODO: Assign ideal capacity as a percentage of the current total capacity of all tables in the table set
-                var requestedCapacity = Math.Max(_tableHeaderSize + requiredSpace + _tableFooterSize, MIN_CAPACITY);
-                _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity);
-                _spaceLeftInOutputTable = _outputTable.Capacity - _tableHeaderSize;
+                // We'll need at least this much space in the new segment
+                var minimumRequiredCapacity = _tableHeaderSize + requiredSpace + _tableFooterSize;
 
-                // Keep track of the total space occupied by tables
+                // However, based on how much data is already in the store, we want to apply an exponential scale to the capacity
+                // of new segments so that the number of segments remains logarithmic in the total number of bytes in the store
+                // even without compaction
+                var targetCapacity = Math.Max(_totalCapacity / 8, MIN_CAPACITY);
+
+                var requestedCapacity = Math.Max(minimumRequiredCapacity, targetCapacity);
+                _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity).ConfigureAwait(false);
+
+                // Keep track of table sizes. Note that _outputTable.Capacity may in fact be larger than the requested capacity.
                 _totalCapacity += _outputTable.Capacity;
+                _spaceLeftInOutputTable = _outputTable.Capacity - _tableHeaderSize;
             }
 
-            // Pass on write batch to writer actor
-            await _commitWriteBatchChannel.SendAsync(new CommitWriteBatchToSegmentMessage(_clock, writeBatch, _outputTable, replyChannel));
             _spaceLeftInOutputTable -= requiredSpace;
+
+            // Pass on write batch to writer actor
+            await _writeBlock.SendAsync(new WriteToSegmentMessage(_clock, writeBatch, _outputTable, replyChannel)).ConfigureAwait(false);
         }
 
-        public Task OnTotalCapacityChangedAsync(long deltaCapacity)
+        public void OnTotalCapacityChanged(long deltaCapacity)
         {
             if (_totalCapacity + deltaCapacity < 0)
             {
@@ -73,7 +82,6 @@ namespace Fugu.Partitioning
             }
 
             _totalCapacity += deltaCapacity;
-            return Task.CompletedTask;
         }
 
         private long GetRequiredSpaceForWriteBatch(WriteBatch writeBatch)

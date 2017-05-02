@@ -36,6 +36,7 @@ namespace Fugu.Core.IntegrationTests
             var data = new byte[256];
             new Random().NextBytes(data);
 
+            //var tableSet = new InMemoryTableSet();
             using (var tableSet = new MemoryMappedTableSet())
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             {
@@ -69,7 +70,14 @@ namespace Fugu.Core.IntegrationTests
                 await store.CommitAsync(batch);
             }
 
-            Console.WriteLine("Finished bucket {0}", bucket);
+            #pragma warning disable CS0162 // Unreachable code detected
+
+            if (CONCURRENT_WRITERS <= 16)
+            {
+                Console.WriteLine("Finished bucket {0}", bucket);
+            }
+
+            #pragma warning restore CS0162 // Unreachable code detected
         }
     }
 }

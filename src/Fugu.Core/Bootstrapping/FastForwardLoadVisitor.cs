@@ -3,21 +3,22 @@ using Fugu.Common;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Bootstrapping
 {
     public class FastForwardLoadVisitor : TableVisitorBase
     {
         private readonly Segment _segment;
-        private readonly Channel<UpdateIndexMessage> _indexUpdateChannel;
+        private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
 
-        public FastForwardLoadVisitor(Segment segment, Channel<UpdateIndexMessage> indexUpdateChannel)
+        public FastForwardLoadVisitor(Segment segment, ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
             Guard.NotNull(segment, nameof(segment));
-            Guard.NotNull(indexUpdateChannel, nameof(indexUpdateChannel));
+            Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
 
             _segment = segment;
-            _indexUpdateChannel = indexUpdateChannel;
+            _indexUpdateBlock = indexUpdateBlock;
         }
 
         public Task Completion { get; private set; } = Task.CompletedTask;
@@ -41,7 +42,7 @@ namespace Fugu.Bootstrapping
             var replyChannel = new TaskCompletionSource<VoidTaskResult>();
             Completion = replyChannel.Task;
 
-            await _indexUpdateChannel.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel));
+            await _indexUpdateBlock.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel));
         }
 
         #endregion

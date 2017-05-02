@@ -4,12 +4,13 @@ using Fugu.Format;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Writer
 {
     public sealed class WriterActorCore
     {
-        private readonly Channel<UpdateIndexMessage> _indexUpdateChannel;
+        private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
 
         private StateVector _clock;
         private Segment _segment;
@@ -17,15 +18,15 @@ namespace Fugu.Writer
 
         public WriterActorCore(
             long maxGeneration,
-            Channel<UpdateIndexMessage> indexUpdateChannel)
+            ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
-            Guard.NotNull(indexUpdateChannel, nameof(indexUpdateChannel));
+            Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
 
             _clock = new StateVector(0, maxGeneration, 0);
-            _indexUpdateChannel = indexUpdateChannel;
+            _indexUpdateBlock = indexUpdateBlock;
         }
 
-        public async Task CommitAsync(
+        public async Task WriteAsync(
             StateVector clock,
             WriteBatch writeBatch,
             IOutputTable outputTable,
@@ -44,7 +45,7 @@ namespace Fugu.Writer
                 {
                     // Complete existing - note that we must make sure that all write have been flushed to disk before
                     // we write the table footer, as its presence guarantees that all data has been written
-                    await _tableWriter.OutputStream.FlushAsync();
+                    await _tableWriter.OutputStream.FlushAsync().ConfigureAwait(false);
                     _tableWriter.WriteTableFooter();
                     _tableWriter.Dispose();
                     _tableWriter = null;
@@ -102,7 +103,7 @@ namespace Fugu.Writer
             _tableWriter.WriteCommitFooter();
 
             // Hand off to index actor
-            await _indexUpdateChannel.SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel));
+            await _indexUpdateBlock.SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel)).ConfigureAwait(false);
         }
     }
 }

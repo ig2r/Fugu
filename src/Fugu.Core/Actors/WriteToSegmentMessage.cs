@@ -3,9 +3,9 @@ using System.Threading.Tasks;
 
 namespace Fugu.Actors
 {
-    public struct CommitWriteBatchToSegmentMessage
+    public struct WriteToSegmentMessage
     {
-        public CommitWriteBatchToSegmentMessage(
+        public WriteToSegmentMessage(
             StateVector clock,
             WriteBatch writeBatch,
             IOutputTable outputTable,

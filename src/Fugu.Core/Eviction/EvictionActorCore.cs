@@ -36,7 +36,7 @@ namespace Fugu.Eviction
             while (_queued.Count > 0 && _oldestVisibleState >= _queued.Peek().evictAt)
             {
                 var (_, segment) = _queued.Dequeue();
-                await _tableSet.RemoveTableAsync(segment.Table);
+                await _tableSet.RemoveTableAsync(segment.Table).ConfigureAwait(false);
             }
         }
     }

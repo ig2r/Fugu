@@ -1,15 +1,17 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
 
 namespace Fugu.Index
 {
     public class IndexActorCore
     {
-        private readonly Channel<SnapshotsUpdateMessage> _snapshotsUpdateChannel;
-        private readonly Channel<SegmentSizesChangedMessage> _segmentSizesChangedChannel;
+        private readonly ITargetBlock<SnapshotsUpdateMessage> _snapshotsUpdateBlock;
+        private readonly ITargetBlock<SegmentSizesChangedMessage> _segmentSizesChangedBlock;
 
         // Accumulates changes to the size of segments in response to index updates
         private readonly SegmentSizeChangeTracker _tracker;
@@ -20,18 +22,18 @@ namespace Fugu.Index
         private CritBitIndex _index = CritBitIndex.Empty;
 
         public IndexActorCore(
-            Channel<SnapshotsUpdateMessage> snapshotsUpdateChannel,
-            Channel<SegmentSizesChangedMessage> segmentSizesChangedChannel)
+            ITargetBlock<SnapshotsUpdateMessage> snapshotsUpdateBlock,
+            ITargetBlock<SegmentSizesChangedMessage> segmentSizesChangedBlock)
         {
-            Guard.NotNull(snapshotsUpdateChannel, nameof(snapshotsUpdateChannel));
-            Guard.NotNull(segmentSizesChangedChannel, nameof(segmentSizesChangedChannel));
+            Guard.NotNull(snapshotsUpdateBlock, nameof(snapshotsUpdateBlock));
+            Guard.NotNull(segmentSizesChangedBlock, nameof(segmentSizesChangedBlock));
 
-            _snapshotsUpdateChannel = snapshotsUpdateChannel;
-            _segmentSizesChangedChannel = segmentSizesChangedChannel;
+            _snapshotsUpdateBlock = snapshotsUpdateBlock;
+            _segmentSizesChangedBlock = segmentSizesChangedBlock;
             _tracker = new SegmentSizeChangeTracker();
         }
 
-        public async void UpdateIndex(
+        public Task UpdateIndexAsync(
             StateVector clock,
             IReadOnlyList<KeyValuePair<byte[], IndexEntry>> indexUpdates,
             TaskCompletionSource<VoidTaskResult> replyChannel)
@@ -69,11 +71,12 @@ namespace Fugu.Index
 
             if (_tracker.TryGetBatchedSizeChanges(_clock, out var sizeChanges))
             {
-                await _segmentSizesChangedChannel.SendAsync(new SegmentSizesChangedMessage(_clock, sizeChanges, _index));
+                var accepted = _segmentSizesChangedBlock.Post(new SegmentSizesChangedMessage(_clock, sizeChanges, _index));
+                Debug.Assert(accepted, "Posting SegmentSizesChangedMessage must always succeed.");
             }
 
             // Notify downstream actors of update
-            await _snapshotsUpdateChannel.SendAsync(new SnapshotsUpdateMessage(_clock, _index, replyChannel));
+            return _snapshotsUpdateBlock.SendAsync(new SnapshotsUpdateMessage(_clock, _index, replyChannel));
         }
     }
 }
