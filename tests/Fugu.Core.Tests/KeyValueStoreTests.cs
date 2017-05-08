@@ -159,5 +159,28 @@ namespace Fugu.Core.Tests
                 // Assert
             }
         }
+
+        [Fact]
+        public async Task CloseAsync_Succeeds()
+        {
+            // Arrange
+            var tableSet = new InMemoryTableSet();
+            var store = await KeyValueStore.CreateAsync(tableSet);
+
+            var key1 = Encoding.UTF8.GetBytes("key:1");
+            var value1 = Encoding.UTF8.GetBytes("value:1");
+            var batch1 = new WriteBatch();
+            batch1.Put(key1, value1);
+
+            var key2 = Encoding.UTF8.GetBytes("key:2");
+            var value2 = Encoding.UTF8.GetBytes("value:2");
+            var batch2 = new WriteBatch();
+            batch2.Put(key2, value2);
+
+            await store.CommitAsync(batch1);
+
+            // Act
+            await store.CloseAsync();
+        }
     }
 }

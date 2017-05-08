@@ -43,7 +43,7 @@ namespace Fugu.Snapshots
             if (_activeSnapshots.Count == 0)
             {
                 _oldestVisibleState = _clock;
-                return _oldestVisibleStateChangedBlock.SendAsync(_oldestVisibleState);
+                _oldestVisibleStateChangedBlock.Post(_oldestVisibleState);
             }
 
             return Task.CompletedTask;
@@ -75,7 +75,7 @@ namespace Fugu.Snapshots
                 if (oldestNow != _oldestVisibleState)
                 {
                     _oldestVisibleState = oldestNow;
-                    return _oldestVisibleStateChangedBlock.SendAsync(_oldestVisibleState);
+                    _oldestVisibleStateChangedBlock.Post(_oldestVisibleState);
                 }
             }
 

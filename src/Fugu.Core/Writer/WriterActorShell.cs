@@ -1,10 +1,11 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Writer
 {
-    public class WriterActorShell : IWriterActor
+    public class WriterActorShell
     {
         public WriterActorShell(WriterActorCore core)
         {
@@ -16,5 +17,12 @@ namespace Fugu.Writer
         }
 
         public ITargetBlock<WriteToSegmentMessage> WriteBlock { get; }
+
+        public Task Completion => WriteBlock.Completion;
+
+        public void Complete()
+        {
+            WriteBlock.Complete();
+        }
     }
 }

@@ -14,35 +14,74 @@ using System.Threading.Tasks.Dataflow;
 
 namespace Fugu
 {
+    /// <summary>
+    /// A key-value store for <c>byte[]</c> payloads.
+    /// </summary>
     public sealed class KeyValueStore : IDisposable
     {
         internal const int DEFAULT_BOUNDED_CAPACITY = 512;
 
-        private readonly ITargetBlock<TaskCompletionSource<Snapshot>> _getSnapshotBlock;
-        private readonly ITargetBlock<CommitWriteBatchMessage> _commitWriteBatchBlock;
+        private readonly PartitioningActorShell _partitioningActor;
+        private readonly WriterActorShell _writerActor;
+        private readonly IndexActorShell _indexActor;
+        private readonly SnapshotsActorShell _snapshotsActor;
+        private readonly CompactionActorShell _compactionActor;
+        private readonly EvictionActorShell _evictionActor;
+        private readonly IDisposable _balancingLinks;
 
         private KeyValueStore(
-            ITargetBlock<TaskCompletionSource<Snapshot>> getSnapshotBlock,
-            ITargetBlock<CommitWriteBatchMessage> commitWriteBatchBlock)
+            PartitioningActorShell partitioningActor,
+            WriterActorShell writerActor,
+            IndexActorShell indexActor,
+            SnapshotsActorShell snapshotsActor,
+            CompactionActorShell compactionActor,
+            EvictionActorShell evictionActor,
+            IDisposable balancingLinks)
         {
-            Guard.NotNull(getSnapshotBlock, nameof(getSnapshotBlock));
-            Guard.NotNull(commitWriteBatchBlock, nameof(commitWriteBatchBlock));
+            Guard.NotNull(partitioningActor, nameof(partitioningActor));
+            Guard.NotNull(writerActor, nameof(writerActor));
+            Guard.NotNull(indexActor, nameof(indexActor));
+            Guard.NotNull(snapshotsActor, nameof(snapshotsActor));
+            Guard.NotNull(compactionActor, nameof(compactionActor));
+            Guard.NotNull(evictionActor, nameof(evictionActor));
+            Guard.NotNull(balancingLinks, nameof(balancingLinks));
 
-            _getSnapshotBlock = getSnapshotBlock;
-            _commitWriteBatchBlock = commitWriteBatchBlock;
+            _partitioningActor = partitioningActor;
+            _writerActor = writerActor;
+            _indexActor = indexActor;
+            _snapshotsActor = snapshotsActor;
+            _compactionActor = compactionActor;
+            _evictionActor = evictionActor;
+            _balancingLinks = balancingLinks;
         }
 
         public static async Task<KeyValueStore> CreateAsync(ITableSet tableSet)
         {
             Guard.NotNull(tableSet, nameof(tableSet));
 
-            // Set up buffers we need to facilitate upward links
-            var totalCapacityChangedBuffer = new BufferBlock<TotalCapacityChangedMessage>(
-                new DataflowBlockOptions { BoundedCapacity = DEFAULT_BOUNDED_CAPACITY });
-            var updateIndexBuffer = new BufferBlock<UpdateIndexMessage>(
-                new DataflowBlockOptions { BoundedCapacity = DEFAULT_BOUNDED_CAPACITY });
+            // Set up blocks to broadcast balancing information once the store is up
+            var oldestVisibleStateBroadcast = new BroadcastBlock<StateVector>(s => s);
+            var segmentSizesChangedBlock = new BufferBlock<SegmentSizesChangedMessage>();
 
             // Create actors managing store state
+            var snapshotsActor = new SnapshotsActorShell(
+                new SnapshotsActorCore(oldestVisibleStateBroadcast));
+
+            var indexActor = new IndexActorShell(
+                new IndexActorCore(snapshotsActor.SnapshotsUpdateBlock, segmentSizesChangedBlock));
+
+            // Bootstrap store state from given table set
+            var bootstrapper = new Bootstrapper();
+            var bootstrapResult = await bootstrapper.RunAsync(tableSet, indexActor.UpdateIndexBlock).ConfigureAwait(false);
+
+            // Create actors accepting new writes to the store
+            var writerActor = new WriterActorShell(
+                new WriterActorCore(bootstrapResult.MaxGenerationLoaded, indexActor.UpdateIndexBlock));
+
+            var partitioningActor = new PartitioningActorShell(
+                new PartitioningActorCore(tableSet, writerActor.WriteBlock));
+
+            // Create actors enforcing balance invariants
             var evictionActor = new EvictionActorShell(
                 new EvictionActorCore(tableSet));
 
@@ -52,31 +91,28 @@ namespace Fugu
                     //new VoidCompactionStrategy(),
                     tableSet,
                     evictionActor.EvictSegmentBlock,
-                    totalCapacityChangedBuffer,
-                    updateIndexBuffer));
+                    partitioningActor.TotalCapacityChangedBlock,
+                    indexActor.UpdateIndexBlock));
 
-            var snapshotsActor = new SnapshotsActorShell(
-                new SnapshotsActorCore(evictionActor.OldestVisibleStateChangedBlock));
-
-            var indexActor = new IndexActorShell(
-                new IndexActorCore(snapshotsActor.SnapshotsUpdateBlock, compactionActor.SegmentSizesChangedBlock));
-
-            // Bootstrap store state from given table set
-            var bootstrapper = new Bootstrapper();
-            var result = await bootstrapper.RunAsync(tableSet, indexActor.UpdateIndexBlock).ConfigureAwait(false);
-
-            // Create actors accepting new writes to the store
-            var writerActor = new WriterActorShell(
-                new WriterActorCore(result.MaxGenerationLoaded, indexActor.UpdateIndexBlock));
-
-            var partitioningActor = new PartitioningActorShell(
-                new PartitioningActorCore(tableSet, writerActor.WriteBlock));
-
-            totalCapacityChangedBuffer.LinkTo(partitioningActor.TotalCapacityChangedBlock);
-            updateIndexBuffer.LinkTo(indexActor.UpdateIndexBlock);
+            // Connect blocks that relay information on store stats so that compaction and eviction of empty
+            // blocks can commence
+            var oldestVisibleStateLink = oldestVisibleStateBroadcast.LinkTo(evictionActor.OldestVisibleStateChangedBlock);
+            var segmentSizesChangeLink = segmentSizesChangedBlock.LinkTo(compactionActor.SegmentSizesChangedBlock);
+            var balancingLinks = new Disposable(() =>
+            {
+                oldestVisibleStateLink.Dispose();
+                segmentSizesChangeLink.Dispose();
+            });
 
             // From these components, create the store object itself
-            var store = new KeyValueStore(snapshotsActor.GetSnapshotBlock, partitioningActor.CommitWriteBatchBlock);
+            var store = new KeyValueStore(
+                partitioningActor,
+                writerActor,
+                indexActor,
+                snapshotsActor,
+                compactionActor,
+                evictionActor,
+                balancingLinks);
 
             return store;
         }
@@ -84,7 +120,7 @@ namespace Fugu
         public Task<Snapshot> GetSnapshotAsync()
         {
             var replyChannel = new TaskCompletionSource<Snapshot>();
-            var accepted = _getSnapshotBlock.Post(replyChannel);
+            var accepted = _snapshotsActor.GetSnapshotBlock.Post(replyChannel);
             Debug.Assert(accepted, "Posting message to retrieve a store snapshot must always succeed.");
 
             return replyChannel.Task;
@@ -95,10 +131,38 @@ namespace Fugu
             Guard.NotNull(writeBatch, nameof(writeBatch));
 
             var replyChannel = new TaskCompletionSource<VoidTaskResult>();
-            var accepted = _commitWriteBatchBlock.Post(new CommitWriteBatchMessage(writeBatch, replyChannel));
+            var accepted = _partitioningActor.CommitWriteBatchBlock.Post(new CommitWriteBatchMessage(writeBatch, replyChannel));
             Debug.Assert(accepted, "Posting a CommitWriteBatchMessage must always succeed.");
 
             return replyChannel.Task;
+        }
+
+        public async Task CloseAsync()
+        {
+            // Cut links from state-managing actors to balancing actors so that they no longer receive updates about
+            // changes to the core store state
+            _balancingLinks.Dispose();
+
+            // Complete balancing actors and wait for compaction/eviction activities to cease
+            _compactionActor.Complete();
+            await _compactionActor.Completion;
+
+            _evictionActor.Complete();
+            await _evictionActor.Completion;
+
+            // Complete commit/writer actors so that no more changes will be accepted to the store
+            _partitioningActor.Complete();
+            await _partitioningActor.Completion;
+
+            _writerActor.Complete();
+            await _writerActor.Completion;
+
+            // Complete core state-managing actors (index & snapshots)
+            _indexActor.Complete();
+            await _indexActor.Completion;
+
+            _snapshotsActor.Complete();
+            await _snapshotsActor.Completion;
         }
 
         #region IDisposable
