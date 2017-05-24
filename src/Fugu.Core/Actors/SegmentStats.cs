@@ -28,10 +28,5 @@ namespace Fugu.Actors
         public long LiveBytes { get; }
         public long DeadBytes { get; }
         public long TotalBytes => LiveBytes + DeadBytes;
-
-        public static SegmentStats operator +(SegmentStats stats, SegmentSizeChange change)
-        {
-            return new SegmentStats(stats.LiveBytes + change.LiveBytesChange, stats.DeadBytes + change.DeadBytesChange);
-        }
     }
 }

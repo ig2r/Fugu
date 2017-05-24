@@ -20,8 +20,9 @@ namespace Fugu.Compaction
         private readonly ITableFactory _tableFactory;
         private readonly ITargetBlock<EvictSegmentMessage> _evictSegmentBlock;
         private readonly ITargetBlock<TotalCapacityChangedMessage> _totalCapacityChangedBlock;
-        private readonly Dictionary<Segment, SegmentStats> _segmentStats = new Dictionary<Segment, SegmentStats>();
         private readonly ITargetBlock<UpdateIndexMessage> _updateIndexBlock;
+
+        private readonly HashSet<Segment> _activeSegments = new HashSet<Segment>();
 
         private StateVector _compactionThreshold;
 
@@ -45,32 +46,29 @@ namespace Fugu.Compaction
             _updateIndexBlock = updateIndexBlock;
         }
 
-        public async Task OnSegmentSizesChangedAsync(
+        public void OnSegmentCreated(Segment segment)
+        {
+            // We'll keep track of this segment so that we can evict it as soon as it no longer holds valid data
+            _activeSegments.Add(segment);
+        }
+
+        public async Task OnSegmentStatsChangedAsync(
             StateVector clock,
-            IReadOnlyList<KeyValuePair<Segment, SegmentSizeChange>> sizeChanges,
+            IReadOnlyList<KeyValuePair<Segment, SegmentStats>> stats,
             CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index)
         {
-            // Apply updates
-            foreach (var (key, change) in sizeChanges)
-            {
-                var stats = _segmentStats.TryGetValue(key, out var existingStats)
-                    ? existingStats
-                    : default(SegmentStats);
-
-                _segmentStats[key] = stats + change;
-            }
-
-            // Schedule segments for eviction if they no longer hold useful data
-            await EvictEmptyImmutableSegmentsAsync(clock).ConfigureAwait(false);
-
-            // If the given clock has not yet surpassed the bar set by a previous compaction, stop here
+            // If the given clock has not yet surpassed the bar set by a previous compaction, stop here. This is important
+            // so that we don't interleave compactions
             if (!(clock >= _compactionThreshold))
             {
                 return;
             }
 
+            // Figure out if there are any segments that are no longer part of the index, and which we should drop
+            await EvictUnusedSegmentsAsync(clock, stats);
+
             // Check if we need to compact a range of segments
-            var compactableStats = _segmentStats
+            var compactableStats = stats
                 .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration)
                 .OrderBy(kvp => kvp.Key.MinGeneration)
                 .ToArray();
@@ -89,20 +87,24 @@ namespace Fugu.Compaction
                             let segment = kvp.Value.Segment
                             where minGeneration <= segment.MinGeneration && segment.MaxGeneration <= maxGeneration
                             select kvp;
-                var changeCount = query.Count();
 
                 // Determine space required for the compacted table
-                var requiredCapacity = Marshal.SizeOf<TableHeaderRecord>() + Marshal.SizeOf<TableFooterRecord>() +
-                    Marshal.SizeOf<CommitHeaderRecord>() + Marshal.SizeOf<CommitFooterRecord>() +
-                    query.Select(Measure).Sum();
+                var requiredCapacity =
+                    Marshal.SizeOf<TableHeaderRecord>() +
+                    Marshal.SizeOf<CommitHeaderRecord>() +
+                    query.Select(Measure).Sum() +
+                    Marshal.SizeOf<CommitFooterRecord>() +
+                    Marshal.SizeOf<TableFooterRecord>();
 
+                // Allocate output segment and track it as active
                 var outputTable = await _tableFactory.CreateTableAsync(requiredCapacity).ConfigureAwait(false);
                 var outputSegment = new Segment(minGeneration, maxGeneration, outputTable);
+                _activeSegments.Add(outputSegment);
 
                 using (var tableWriter = new TableWriter(outputTable.OutputStream))
                 {
                     tableWriter.WriteTableHeader(minGeneration, maxGeneration);
-                    tableWriter.WriteCommitHeader(changeCount);
+                    tableWriter.WriteCommitHeader(query.Count());
 
                     // First pass: write put/tombstone keys
                     foreach (var (key, indexEntry) in query)
@@ -121,7 +123,7 @@ namespace Fugu.Compaction
                     }
 
                     // Second pass: write payload and assemble index updates
-                    var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>(changeCount);
+                    var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>();
 
                     foreach (var (key, indexEntry) in query)
                     {
@@ -150,42 +152,38 @@ namespace Fugu.Compaction
                     tableWriter.WriteTableFooter();
 
                     // Notify environment
-                    await _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity)).ConfigureAwait(false);
-
-                    var updateIndexMessage = new UpdateIndexMessage(_compactionThreshold, indexUpdates, null);
-                    await _updateIndexBlock.SendAsync(updateIndexMessage).ConfigureAwait(false);
+                    await Task.WhenAll(
+                        _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity)),
+                        _updateIndexBlock.SendAsync(new UpdateIndexMessage(_compactionThreshold, indexUpdates, null)))
+                        .ConfigureAwait(false);
                 }
             }
         }
 
-        private Task EvictEmptyImmutableSegmentsAsync(StateVector clock)
+        private async Task EvictUnusedSegmentsAsync(StateVector clock, IReadOnlyList<KeyValuePair<Segment, SegmentStats>> stats)
         {
-            var emptySegments = _segmentStats
-                .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration && kvp.Value.LiveBytes == 0)
-                .Select(kvp => kvp.Key)
+            // Search for segments that are not present in the segment stats collection, and span a max generation range
+            // that's less then the output generation associated with the stats collection. Those segments no longer hold
+            // values that can be accessed from the current index, and since they're different from the output generation, they
+            // can't hold usable data in the future either.
+            var unusedSegments = _activeSegments
+                .Except(stats.Select(s => s.Key))
+                .Where(s => s.MaxGeneration < clock.OutputGeneration)
                 .ToArray();
 
-            foreach (var s in emptySegments)
-            {
-                _segmentStats.Remove(s);
-            }
-
+            // Schedule unused segments for eviction, then notify observers that the overall capacity of the table set has changed
             long deltaCapacity = 0;
-            var tasks = new List<Task>();
-
-            tasks.AddRange(emptySegments.Select(s =>
+            foreach (var segment in unusedSegments)
             {
-                deltaCapacity -= s.Table.Capacity;
-                var msg = new EvictSegmentMessage(clock, s);
-                return _evictSegmentBlock.SendAsync(msg);
-            }));
+                _activeSegments.Remove(segment);
+                deltaCapacity -= segment.Table.Capacity;
+                _evictSegmentBlock.Post(new EvictSegmentMessage(clock, segment));
+            }
 
             if (deltaCapacity != 0)
             {
-                tasks.Add(_totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)));
+                await _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)).ConfigureAwait(false);
             }
-
-            return Task.WhenAll(tasks);
         }
 
         private long Measure(KeyValuePair<byte[], IndexEntry> indexItem)

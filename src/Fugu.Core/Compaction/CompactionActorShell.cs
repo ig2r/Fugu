@@ -11,18 +11,26 @@ namespace Fugu.Compaction
         {
             Guard.NotNull(core, nameof(core));
 
-            SegmentSizesChangedBlock = new ActionBlock<SegmentSizesChangedMessage>(msg =>
-                core.OnSegmentSizesChangedAsync(msg.Clock, msg.SizeChanges, msg.Index),
-                new ExecutionDataflowBlockOptions { BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
+            var scheduler = new ConcurrentExclusiveSchedulerPair().ExclusiveScheduler;
+            SegmentCreatedBlock = new ActionBlock<Segment>(
+                s => core.OnSegmentCreated(s),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler, BoundedCapacity = 1 });
+            SegmentStatsChangedBlock = new ActionBlock<SegmentStatsChangedMessage>(
+                msg => core.OnSegmentStatsChangedAsync(msg.Clock, msg.Stats, msg.Index),
+                new ExecutionDataflowBlockOptions { TaskScheduler = scheduler, BoundedCapacity = 1 });
         }
 
-        public ITargetBlock<SegmentSizesChangedMessage> SegmentSizesChangedBlock { get; }
+        public ITargetBlock<Segment> SegmentCreatedBlock { get; }
+        public ITargetBlock<SegmentStatsChangedMessage> SegmentStatsChangedBlock { get; }
 
-        public Task Completion => SegmentSizesChangedBlock.Completion;
+        public Task Completion => Task.WhenAll(
+            SegmentCreatedBlock.Completion,
+            SegmentStatsChangedBlock.Completion);
 
         public void Complete()
         {
-            SegmentSizesChangedBlock.Complete();
+            SegmentCreatedBlock.Complete();
+            SegmentStatsChangedBlock.Complete();
         }
     }
 }

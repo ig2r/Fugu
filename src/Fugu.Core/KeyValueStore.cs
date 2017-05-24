@@ -60,15 +60,16 @@ namespace Fugu
             Guard.NotNull(tableSet, nameof(tableSet));
 
             // Set up blocks to broadcast balancing information once the store is up
-            var oldestVisibleStateBroadcast = new BroadcastBlock<StateVector>(s => s);
-            var segmentSizesChangedBlock = new BufferBlock<SegmentSizesChangedMessage>();
+            var segmentCreatedBuffer = new BufferBlock<Segment>();
+            var segmentStatsChangedBroadcast = new BroadcastBlock<SegmentStatsChangedMessage>(msg => msg);
+            var oldestVisibleStateBroadcast = new BroadcastBlock<StateVector>(clock => clock);
 
             // Create actors managing store state
             var snapshotsActor = new SnapshotsActorShell(
                 new SnapshotsActorCore(oldestVisibleStateBroadcast));
 
             var indexActor = new IndexActorShell(
-                new IndexActorCore(snapshotsActor.SnapshotsUpdateBlock, segmentSizesChangedBlock));
+                new IndexActorCore(snapshotsActor.SnapshotsUpdateBlock, segmentStatsChangedBroadcast));
 
             // Bootstrap store state from given table set
             var bootstrapper = new Bootstrapper();
@@ -76,7 +77,7 @@ namespace Fugu
 
             // Create actors accepting new writes to the store
             var writerActor = new WriterActorShell(
-                new WriterActorCore(bootstrapResult.MaxGenerationLoaded, indexActor.UpdateIndexBlock));
+                new WriterActorCore(bootstrapResult.MaxGenerationLoaded, indexActor.UpdateIndexBlock, segmentCreatedBuffer));
 
             var partitioningActor = new PartitioningActorShell(
                 new PartitioningActorCore(tableSet, writerActor.WriteBlock));
@@ -96,12 +97,15 @@ namespace Fugu
 
             // Connect blocks that relay information on store stats so that compaction and eviction of empty
             // blocks can commence
+            var segmentCreatedLink = segmentCreatedBuffer.LinkTo(compactionActor.SegmentCreatedBlock);
+            var segmentStatsChangeLink = segmentStatsChangedBroadcast.LinkTo(compactionActor.SegmentStatsChangedBlock);
             var oldestVisibleStateLink = oldestVisibleStateBroadcast.LinkTo(evictionActor.OldestVisibleStateChangedBlock);
-            var segmentSizesChangeLink = segmentSizesChangedBlock.LinkTo(compactionActor.SegmentSizesChangedBlock);
+
             var balancingLinks = new Disposable(() =>
             {
+                segmentCreatedLink.Dispose();
+                segmentStatsChangeLink.Dispose();
                 oldestVisibleStateLink.Dispose();
-                segmentSizesChangeLink.Dispose();
             });
 
             // From these components, create the store object itself

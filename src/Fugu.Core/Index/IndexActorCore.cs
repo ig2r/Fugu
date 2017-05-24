@@ -1,7 +1,6 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
@@ -11,10 +10,10 @@ namespace Fugu.Index
     public class IndexActorCore
     {
         private readonly ITargetBlock<SnapshotsUpdateMessage> _snapshotsUpdateBlock;
-        private readonly ITargetBlock<SegmentSizesChangedMessage> _segmentSizesChangedBlock;
+        private readonly ITargetBlock<SegmentStatsChangedMessage> _segmentStatsChangedBlock;
 
         // Accumulates changes to the size of segments in response to index updates
-        private readonly SegmentSizeChangeTracker _tracker;
+        private readonly SegmentSizeTracker _tracker;
 
         private StateVector _clock = new StateVector();
 
@@ -23,14 +22,14 @@ namespace Fugu.Index
 
         public IndexActorCore(
             ITargetBlock<SnapshotsUpdateMessage> snapshotsUpdateBlock,
-            ITargetBlock<SegmentSizesChangedMessage> segmentSizesChangedBlock)
+            ITargetBlock<SegmentStatsChangedMessage> segmentStatsChangedBlock)
         {
             Guard.NotNull(snapshotsUpdateBlock, nameof(snapshotsUpdateBlock));
-            Guard.NotNull(segmentSizesChangedBlock, nameof(segmentSizesChangedBlock));
+            Guard.NotNull(segmentStatsChangedBlock, nameof(segmentStatsChangedBlock));
 
             _snapshotsUpdateBlock = snapshotsUpdateBlock;
-            _segmentSizesChangedBlock = segmentSizesChangedBlock;
-            _tracker = new SegmentSizeChangeTracker();
+            _segmentStatsChangedBlock = segmentStatsChangedBlock;
+            _tracker = new SegmentSizeTracker();
         }
 
         public Task UpdateIndexAsync(
@@ -69,11 +68,9 @@ namespace Fugu.Index
                 }
             }
 
-            if (_tracker.TryGetBatchedSizeChanges(_clock, out var sizeChanges))
-            {
-                var accepted = _segmentSizesChangedBlock.Post(new SegmentSizesChangedMessage(_clock, sizeChanges, _index));
-                Debug.Assert(accepted, "Posting SegmentSizesChangedMessage must always succeed.");
-            }
+            // Make new segment stats available to observers
+            _tracker.Prune();
+            _segmentStatsChangedBlock.Post(new SegmentStatsChangedMessage(_clock, _tracker.Stats, _index));
 
             // Notify downstream actors of update
             return _snapshotsUpdateBlock.SendAsync(new SnapshotsUpdateMessage(_clock, _index, replyChannel));
