@@ -6,7 +6,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Snapshots
 {
-    public class SnapshotsActorShell : ISnapshotsActor
+    public class SnapshotsActorShell
     {
         private readonly ActionBlock<Snapshot> _snapshotDisposedBlock;
 
@@ -36,6 +36,16 @@ namespace Fugu.Snapshots
 
         public ITargetBlock<SnapshotsUpdateMessage> SnapshotsUpdateBlock { get; }
         public ITargetBlock<TaskCompletionSource<Snapshot>> GetSnapshotBlock { get; }
+
+        public Task Completion => Task.WhenAll(
+            SnapshotsUpdateBlock.Completion, GetSnapshotBlock.Completion, _snapshotDisposedBlock.Completion);
+
+        public void Complete()
+        {
+            SnapshotsUpdateBlock.Complete();
+            GetSnapshotBlock.Complete();
+            _snapshotDisposedBlock.Complete();
+        }
 
         private void OnSnapshotDisposed(Snapshot snapshot)
         {

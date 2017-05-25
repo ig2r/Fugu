@@ -3,23 +3,23 @@ using System.Collections.Generic;
 
 namespace Fugu.Actors
 {
-    public struct SegmentSizesChangedMessage
+    public struct SegmentStatsChangedMessage
     {
-        public SegmentSizesChangedMessage(
+        public SegmentStatsChangedMessage(
             StateVector clock,
-            IReadOnlyList<KeyValuePair<Segment, SegmentSizeChange>> sizeChanges,
+            IReadOnlyList<KeyValuePair<Segment, SegmentStats>> stats,
             CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index)
         {
             Guard.NotNull(index, nameof(index));
-            Guard.NotNull(sizeChanges, nameof(sizeChanges));
+            Guard.NotNull(stats, nameof(stats));
 
             Clock = clock;
             Index = index;
-            SizeChanges = sizeChanges;
+            Stats = stats;
         }
 
         public StateVector Clock { get; }
-        public IReadOnlyList<KeyValuePair<Segment, SegmentSizeChange>> SizeChanges { get; }
+        public IReadOnlyList<KeyValuePair<Segment, SegmentStats>> Stats { get; }
         public CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> Index { get; }
     }
 }

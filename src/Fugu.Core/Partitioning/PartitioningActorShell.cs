@@ -2,10 +2,11 @@
 using Fugu.Common;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using System;
 
 namespace Fugu.Partitioning
 {
-    public class PartitioningActorShell : IPartitioningActor
+    public class PartitioningActorShell
     {
         public PartitioningActorShell(PartitioningActorCore core)
         {
@@ -25,5 +26,13 @@ namespace Fugu.Partitioning
 
         public ITargetBlock<CommitWriteBatchMessage> CommitWriteBatchBlock { get; }
         public ITargetBlock<TotalCapacityChangedMessage> TotalCapacityChangedBlock { get; }
+
+        public Task Completion => Task.WhenAll(CommitWriteBatchBlock.Completion, TotalCapacityChangedBlock.Completion);
+
+        public void Complete()
+        {
+            CommitWriteBatchBlock.Complete();
+            TotalCapacityChangedBlock.Complete();
+        }
     }
 }

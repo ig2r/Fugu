@@ -1,10 +1,11 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace Fugu.Index
 {
-    public class IndexActorShell : IIndexActor
+    public class IndexActorShell
     {
         public IndexActorShell(IndexActorCore core)
         {
@@ -15,5 +16,12 @@ namespace Fugu.Index
         }
 
         public ITargetBlock<UpdateIndexMessage> UpdateIndexBlock { get; }
+
+        public Task Completion => UpdateIndexBlock.Completion;
+
+        public void Complete()
+        {
+            UpdateIndexBlock.Complete();
+        }
     }
 }

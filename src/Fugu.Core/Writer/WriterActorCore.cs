@@ -11,6 +11,7 @@ namespace Fugu.Writer
     public sealed class WriterActorCore
     {
         private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
+        private readonly ITargetBlock<Segment> _segmentCreatedBlock;
 
         private StateVector _clock;
         private Segment _segment;
@@ -18,12 +19,15 @@ namespace Fugu.Writer
 
         public WriterActorCore(
             long maxGeneration,
-            ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
+            ITargetBlock<UpdateIndexMessage> indexUpdateBlock,
+            ITargetBlock<Segment> segmentCreatedBlock)
         {
             Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
+            Guard.NotNull(segmentCreatedBlock, nameof(segmentCreatedBlock));
 
             _clock = new StateVector(0, maxGeneration, 0);
             _indexUpdateBlock = indexUpdateBlock;
+            _segmentCreatedBlock = segmentCreatedBlock;
         }
 
         public async Task WriteAsync(
@@ -52,10 +56,11 @@ namespace Fugu.Writer
                     _segment = null;
                 }
 
-                // Start new
+                // Start new segment and notify observers
                 _clock = _clock.NextOutputGeneration();
-
                 _segment = new Segment(_clock.OutputGeneration, _clock.OutputGeneration, outputTable);
+                _segmentCreatedBlock.Post(_segment);
+
                 _tableWriter = new TableWriter(outputTable.OutputStream);
                 _tableWriter.WriteTableHeader(_clock.OutputGeneration, _clock.OutputGeneration);
             }

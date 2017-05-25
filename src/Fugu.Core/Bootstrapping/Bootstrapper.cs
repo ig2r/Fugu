@@ -32,7 +32,7 @@ namespace Fugu.Bootstrapping
                 ? loadedSegments.Max(s => s.MaxGeneration)
                 : 0;
 
-            return new BootstrapperResult(maxGenerationLoaded);
+            return new BootstrapperResult(maxGenerationLoaded, loadedSegments);
         }
 
         private async Task<IEnumerable<Segment>> GetAvailableSegmentsAsync(IEnumerable<ITable> tables)
