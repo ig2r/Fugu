@@ -91,6 +91,7 @@ namespace Fugu
                     new AlwaysCompactCompactionStrategy(),
                     //new VoidCompactionStrategy(),
                     tableSet,
+                    bootstrapResult.LoadedSegments,
                     evictionActor.EvictSegmentBlock,
                     partitioningActor.TotalCapacityChangedBlock,
                     indexActor.UpdateIndexBlock));

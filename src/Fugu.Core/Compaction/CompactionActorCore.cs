@@ -22,19 +22,21 @@ namespace Fugu.Compaction
         private readonly ITargetBlock<TotalCapacityChangedMessage> _totalCapacityChangedBlock;
         private readonly ITargetBlock<UpdateIndexMessage> _updateIndexBlock;
 
-        private readonly HashSet<Segment> _activeSegments = new HashSet<Segment>();
+        private readonly HashSet<Segment> _activeSegments;
 
         private StateVector _compactionThreshold;
 
         public CompactionActorCore(
             ICompactionStrategy compactionStrategy,
             ITableFactory tableFactory,
+            IEnumerable<Segment> loadedSegments,
             ITargetBlock<EvictSegmentMessage> evictSegmentBlock,
             ITargetBlock<TotalCapacityChangedMessage> totalCapacityChangedBlock,
             ITargetBlock<UpdateIndexMessage> updateIndexBlock)
         {
             Guard.NotNull(compactionStrategy, nameof(compactionStrategy));
             Guard.NotNull(tableFactory, nameof(tableFactory));
+            Guard.NotNull(loadedSegments, nameof(loadedSegments));
             Guard.NotNull(evictSegmentBlock, nameof(evictSegmentBlock));
             Guard.NotNull(totalCapacityChangedBlock, nameof(totalCapacityChangedBlock));
             Guard.NotNull(updateIndexBlock, nameof(updateIndexBlock));
@@ -44,6 +46,8 @@ namespace Fugu.Compaction
             _evictSegmentBlock = evictSegmentBlock;
             _totalCapacityChangedBlock = totalCapacityChangedBlock;
             _updateIndexBlock = updateIndexBlock;
+
+            _activeSegments = new HashSet<Segment>(loadedSegments);
         }
 
         public void OnSegmentCreated(Segment segment)
