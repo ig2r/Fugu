@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26228.4
+VisualStudioVersion = 15.0.26228.9
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fugu.Core", "src\Fugu.Core\Fugu.Core.csproj", "{63AE6199-37FA-4227-A3AB-3A3FDBA033FB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fugu.Core.Tests", "tests\Fugu.Core.Tests\Fugu.Core.Tests.csproj", "{AA88BB70-B002-4A1A-8A10-0117B972AE84}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fugu.Core.IntegrationTests", "tests\Fugu.Core.IntegrationTests\Fugu.Core.IntegrationTests.csproj", "{A3E87750-D06D-4176-BED7-4F16B3A9473D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fugu.Core.Benchmarks", "tests\Fugu.Core.Benchmarks\Fugu.Core.Benchmarks.csproj", "{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -55,6 +57,18 @@ Global
 		{A3E87750-D06D-4176-BED7-4F16B3A9473D}.Release|x64.Build.0 = Release|Any CPU
 		{A3E87750-D06D-4176-BED7-4F16B3A9473D}.Release|x86.ActiveCfg = Release|Any CPU
 		{A3E87750-D06D-4176-BED7-4F16B3A9473D}.Release|x86.Build.0 = Release|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Debug|x64.Build.0 = Debug|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Debug|x86.Build.0 = Debug|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Release|x64.ActiveCfg = Release|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Release|x64.Build.0 = Release|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Release|x86.ActiveCfg = Release|Any CPU
+		{3F0B64B3-87B7-4398-82CC-C3FC04C42B1D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
