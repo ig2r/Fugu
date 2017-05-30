@@ -72,9 +72,12 @@ namespace Fugu.Compaction
             await EvictUnusedSegmentsAsync(clock, stats);
 
             // Check if we need to compact a range of segments
-            var compactableStats = stats
+            var compactableSegments = stats
                 .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration)
-                .OrderBy(kvp => kvp.Key.MinGeneration)
+                .ToArray();
+
+            var compactableStats = compactableSegments
+                .Select(kvp => kvp.Value)
                 .ToArray();
 
             if (_compactionStrategy.TryGetRangeToCompact(compactableStats, out var range))
@@ -84,8 +87,8 @@ namespace Fugu.Compaction
                 _compactionThreshold = clock.NextCompaction();
 
                 // Get items from index that need to go into the newly compacted segment
-                var minGeneration = compactableStats[range.offset].Key.MinGeneration;
-                var maxGeneration = compactableStats[range.offset + range.count - 1].Key.MaxGeneration;
+                var minGeneration = compactableSegments[range.Offset].Key.MinGeneration;
+                var maxGeneration = compactableSegments[range.Offset + range.Count - 1].Key.MaxGeneration;
 
                 var query = from kvp in index
                             let segment = kvp.Value.Segment
@@ -96,7 +99,7 @@ namespace Fugu.Compaction
                 var requiredCapacity =
                     Marshal.SizeOf<TableHeaderRecord>() +
                     Marshal.SizeOf<CommitHeaderRecord>() +
-                    query.Select(Measure).Sum() +
+                    query.Select(kvp => Measure.GetSize(kvp.Key, kvp.Value)).Sum() +
                     Marshal.SizeOf<CommitFooterRecord>() +
                     Marshal.SizeOf<TableFooterRecord>();
 
@@ -187,21 +190,6 @@ namespace Fugu.Compaction
             if (deltaCapacity != 0)
             {
                 await _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)).ConfigureAwait(false);
-            }
-        }
-
-        private long Measure(KeyValuePair<byte[], IndexEntry> indexItem)
-        {
-            long size = indexItem.Key.Length;
-
-            switch (indexItem.Value)
-            {
-                case IndexEntry.Value value:
-                    return size + Marshal.SizeOf<PutRecord>() + value.ValueLength;
-                case IndexEntry.Tombstone tombstone:
-                    return size + Marshal.SizeOf<TombstoneRecord>();
-                default:
-                    throw new NotSupportedException();
             }
         }
     }

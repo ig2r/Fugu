@@ -88,7 +88,8 @@ namespace Fugu
 
             var compactionActor = new CompactionActorShell(
                 new CompactionActorCore(
-                    new AlwaysCompactCompactionStrategy(),
+                    new RatioCompactionStrategy(4096, 2.0),
+                    //new AlwaysCompactCompactionStrategy(),
                     //new VoidCompactionStrategy(),
                     tableSet,
                     bootstrapResult.LoadedSegments,

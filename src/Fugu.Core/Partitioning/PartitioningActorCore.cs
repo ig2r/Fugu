@@ -2,6 +2,7 @@
 using Fugu.Common;
 using Fugu.Format;
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
@@ -12,6 +13,10 @@ namespace Fugu.Partitioning
     {
         // The minimum capacity, in bytes, when allocating a new segment
         private const long MIN_CAPACITY = 4096;
+
+        // The factor by which each new segment should be larger than the previous one. Must be greater than 1.0.
+        private const double SCALE_FACTOR = 1.125;
+
         private readonly long _tableHeaderSize;
         private readonly long _tableFooterSize;
 
@@ -26,8 +31,7 @@ namespace Fugu.Partitioning
         // The space, in bytes, that's left in the current output table
         private long _spaceLeftInOutputTable = 0;
 
-        // The total space, in bytes, that's occupied by all the tables in the store's table set. This number is used to determine
-        // the capacity of new output tables, as we aim to make output tables larger as the table set grows.
+        // The total capacity, in bytes, of all the tables that are currently in use
         private long _totalCapacity = 0;
 
         public PartitioningActorCore(ITableFactory tableFactory, ITargetBlock<WriteToSegmentMessage> writeBlock)
@@ -48,19 +52,18 @@ namespace Fugu.Partitioning
 
             var requiredSpace = GetRequiredSpaceForWriteBatch(writeBatch);
 
-            // If there isn't enough space left in the current output segment for the incoming write, or if there's
-            // no output segment at all, determine requested size and tell writer actor to start a new segment
+            // If there isn't enough space left in the current output segment for the incoming write (or if there's
+            // no output segment at all), we need to start a new segment
             if (_spaceLeftInOutputTable < requiredSpace + _tableFooterSize)
             {
-                // We'll need at least this much space in the new segment
-                var minimumRequiredCapacity = _tableHeaderSize + requiredSpace + _tableFooterSize;
+                // At a minimum, the new segment must be large enough to fit the incoming write plus requisite headers.
+                // Beyond that, we scale new segments in proportion to the amount of data that's already in the store.
+                // For sustained writes, this will cause segment sizes to follow a geometric progression with a common
+                // ratio of SCALE_FACTOR, thereby curtailing the number of segments created.
+                var requiredCapacity = _tableHeaderSize + requiredSpace + _tableFooterSize;
+                var desiredCapacity = MIN_CAPACITY + (long)(_totalCapacity * (SCALE_FACTOR - 1.0));
+                var requestedCapacity = Math.Max(requiredCapacity, desiredCapacity);
 
-                // However, based on how much data is already in the store, we want to apply an exponential scale to the capacity
-                // of new segments so that the number of segments remains logarithmic in the total number of bytes in the store
-                // even without compaction
-                var targetCapacity = Math.Max(_totalCapacity / 8, MIN_CAPACITY);
-
-                var requestedCapacity = Math.Max(minimumRequiredCapacity, targetCapacity);
                 _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity).ConfigureAwait(false);
 
                 // Keep track of table sizes. Note that _outputTable.Capacity may in fact be larger than the requested capacity.
@@ -86,24 +89,10 @@ namespace Fugu.Partitioning
 
         private long GetRequiredSpaceForWriteBatch(WriteBatch writeBatch)
         {
-            long size = Marshal.SizeOf<CommitHeaderRecord>() + Marshal.SizeOf<CommitFooterRecord>();
-
-            foreach (var (key, writeBatchItem) in writeBatch.Changes)
-            {
-                size += key.Length;
-
-                if (writeBatchItem is WriteBatchItem.Put put)
-                {
-                    size += Marshal.SizeOf<PutRecord>();
-                    size += put.Value.Length;
-                }
-                else
-                {
-                    size += Marshal.SizeOf<TombstoneRecord>();
-                }
-            }
-
-            return size;
+            return
+                Marshal.SizeOf<CommitHeaderRecord>() +
+                writeBatch.Changes.Sum(kvp => Measure.GetSize(kvp.Key, kvp.Value)) +
+                Marshal.SizeOf<CommitFooterRecord>();
         }
     }
 }

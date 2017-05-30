@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace Fugu.Actors
@@ -7,6 +8,7 @@ namespace Fugu.Actors
     /// <summary>
     /// Usage statistics for an associated segment, i.e., the number of "live" and "dead" payload bytes within.
     /// </summary>
+    [DebuggerDisplay("LiveBytes = {LiveBytes}, DeadBytes = {DeadBytes}")]
     public struct SegmentStats
     {
         public SegmentStats(long liveBytes, long deadBytes)
