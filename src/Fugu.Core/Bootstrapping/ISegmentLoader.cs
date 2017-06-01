@@ -3,11 +3,10 @@
 namespace Fugu.Bootstrapping
 {
     /// <summary>
-    /// Provides functionality to verify the integrity of segments and load their contents.
+    /// Provides functionality to load segment contents into the index.
     /// </summary>
     public interface ISegmentLoader
     {
-        Task<bool> CheckTableFooterAsync(ITable table);
-        Task LoadSegmentAsync(Segment segment, bool verifyChecksums);
+        Task<bool> TryLoadSegmentAsync(Segment segment, bool requireValidFooter);
     }
 }

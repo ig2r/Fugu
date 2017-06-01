@@ -2,6 +2,7 @@
 using Fugu.Common;
 using Fugu.Format;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
@@ -15,6 +16,7 @@ namespace Fugu.Writer
 
         private StateVector _clock;
         private Segment _segment;
+        private Stream _outputStream;
         private TableWriter _tableWriter;
 
         public WriterActorCore(
@@ -33,7 +35,7 @@ namespace Fugu.Writer
         public async Task WriteAsync(
             StateVector clock,
             WriteBatch writeBatch,
-            IOutputTable outputTable,
+            ITable outputTable,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             Guard.NotNull(writeBatch, nameof(writeBatch));
@@ -49,10 +51,12 @@ namespace Fugu.Writer
                 {
                     // Complete existing - note that we must make sure that all write have been flushed to disk before
                     // we write the table footer, as its presence guarantees that all data has been written
-                    await _tableWriter.OutputStream.FlushAsync().ConfigureAwait(false);
+                    await _outputStream.FlushAsync().ConfigureAwait(false);
                     _tableWriter.WriteTableFooter();
                     _tableWriter.Dispose();
+                    _outputStream.Dispose();
                     _tableWriter = null;
+                    _outputStream = null;
                     _segment = null;
                 }
 
@@ -61,7 +65,8 @@ namespace Fugu.Writer
                 _segment = new Segment(_clock.OutputGeneration, _clock.OutputGeneration, outputTable);
                 _segmentCreatedBlock.Post(_segment);
 
-                _tableWriter = new TableWriter(outputTable.OutputStream);
+                _outputStream = outputTable.GetOutputStream(0, outputTable.Capacity);
+                _tableWriter = new TableWriter(_outputStream);
                 _tableWriter.WriteTableHeader(_clock.OutputGeneration, _clock.OutputGeneration);
             }
 
@@ -91,7 +96,7 @@ namespace Fugu.Writer
             {
                 if (writeBatchItem is WriteBatchItem.Put put)
                 {
-                    var valueEntry = new IndexEntry.Value(_segment, _tableWriter.Position, put.Value.Length);
+                    var valueEntry = new IndexEntry.Value(_segment, _outputStream.Position, put.Value.Length);
                     indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
 
                     // Write value

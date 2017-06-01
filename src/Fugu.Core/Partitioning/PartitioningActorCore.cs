@@ -26,7 +26,7 @@ namespace Fugu.Partitioning
         private StateVector _clock = new StateVector();
 
         // The current table to which incoming commits are directed
-        private IOutputTable _outputTable;
+        private ITable _outputTable;
 
         // The space, in bytes, that's left in the current output table
         private long _spaceLeftInOutputTable = 0;

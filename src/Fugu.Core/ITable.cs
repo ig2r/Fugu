@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.IO;
 
 namespace Fugu
 {
@@ -10,5 +6,6 @@ namespace Fugu
     {
         long Capacity { get; }
         Stream GetInputStream(long position, long size);
+        Stream GetOutputStream(long position, long size);
     }
 }

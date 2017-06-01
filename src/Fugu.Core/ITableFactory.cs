@@ -7,6 +7,6 @@ namespace Fugu
 {
     public interface ITableFactory
     {
-        Task<IOutputTable> CreateTableAsync(long capacity);
+        Task<ITable> CreateTableAsync(long capacity);
     }
 }

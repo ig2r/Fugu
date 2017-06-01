@@ -108,7 +108,8 @@ namespace Fugu.Compaction
                 var outputSegment = new Segment(minGeneration, maxGeneration, outputTable);
                 _activeSegments.Add(outputSegment);
 
-                using (var tableWriter = new TableWriter(outputTable.OutputStream))
+                using (var outputStream = outputTable.GetOutputStream(0, outputTable.Capacity))
+                using (var tableWriter = new TableWriter(outputStream))
                 {
                     tableWriter.WriteTableHeader(minGeneration, maxGeneration);
                     tableWriter.WriteCommitHeader(query.Count());
@@ -137,13 +138,13 @@ namespace Fugu.Compaction
                         switch (indexEntry)
                         {
                             case IndexEntry.Value src:
-                                var valueEntry = new IndexEntry.Value(outputSegment, tableWriter.Position, src.ValueLength);
+                                var valueEntry = new IndexEntry.Value(outputSegment, outputStream.Position, src.ValueLength);
                                 indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
 
                                 // Copy data
                                 using (var inputStream = src.Segment.Table.GetInputStream(src.Offset, src.ValueLength))
                                 {
-                                    inputStream.CopyTo(tableWriter.OutputStream);
+                                    inputStream.CopyTo(outputStream);
                                 }
 
                                 break;

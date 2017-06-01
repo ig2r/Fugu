@@ -19,45 +19,39 @@ namespace Fugu.Bootstrapping
             Guard.NotNull(tableSet, nameof(tableSet));
             Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
 
-            // Walk through tables in table set and try to load segment metadata
+            // Enumerate available segments
             var tables = await tableSet.GetTablesAsync();
             var availableSegments = await GetAvailableSegmentsAsync(tables);
 
+            // Scan segments to populate index
+            var segmentLoader = new SegmentLoader(indexUpdateBlock);
             var loadStrategy = new SegmentLoadStrategy();
-            var tableLoader = new SegmentLoader(new TableParser(), indexUpdateBlock);
+            await loadStrategy.RunAsync(availableSegments, segmentLoader);
 
-            var loadedSegments = await loadStrategy.RunAsync(availableSegments, tableLoader);
-
-            var maxGenerationLoaded = loadedSegments.Any()
-                ? loadedSegments.Max(s => s.MaxGeneration)
+            var maxGenerationLoaded = segmentLoader.LoadedSegments.Any()
+                ? segmentLoader.LoadedSegments.Max(s => s.MaxGeneration)
                 : 0;
 
-            return new BootstrapperResult(maxGenerationLoaded, loadedSegments);
+            return new BootstrapperResult(maxGenerationLoaded, segmentLoader.LoadedSegments);
         }
 
         private async Task<IEnumerable<Segment>> GetAvailableSegmentsAsync(IEnumerable<ITable> tables)
         {
-            var availableSegments = new List<Segment>();
-            var corruptTables = new List<ITable>();
+            var tasks = new HashSet<Task<Segment>>(tables.Select(ReadTableHeaderAsync));
+            var segments = new List<Segment>();
 
-            var headerRetrievals = tables.ToDictionary(t => ReadTableHeaderAsync(t));
-            while (headerRetrievals.Count > 0)
+            while (tasks.Count > 0)
             {
-                var task = await Task.WhenAny(headerRetrievals.Keys);
+                var task = await Task.WhenAny(tasks);
+                tasks.Remove(task);
 
                 if (task.IsCompleted)
                 {
-                    availableSegments.Add(await task);
+                    segments.Add(task.Result);
                 }
-                else
-                {
-                    corruptTables.Add(headerRetrievals[task]);
-                }
-
-                headerRetrievals.Remove(task);
             }
 
-            return availableSegments;
+            return segments;
         }
 
         private async Task<Segment> ReadTableHeaderAsync(ITable table)
