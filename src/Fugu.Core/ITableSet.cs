@@ -8,6 +8,6 @@ namespace Fugu
     public interface ITableSet : ITableFactory
     {
         Task<IEnumerable<ITable>> GetTablesAsync();
-        Task RemoveTableAsync(ITable table);
+        Task RemoveTableAsync(IReadOnlyTable table);
     }
 }

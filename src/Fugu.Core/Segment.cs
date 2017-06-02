@@ -7,7 +7,7 @@ namespace Fugu
     [DebuggerDisplay("MinGeneration = {MinGeneration}, MaxGeneration = {MaxGeneration}")]
     public class Segment
     {
-        public Segment(long minGeneration, long maxGeneration, ITable table)
+        public Segment(long minGeneration, long maxGeneration, IReadOnlyTable table)
         {
             if (minGeneration <= 0)
             {
@@ -28,6 +28,6 @@ namespace Fugu
 
         public long MinGeneration { get; }
         public long MaxGeneration { get; }
-        public ITable Table { get; }
+        public IReadOnlyTable Table { get; }
     }
 }

@@ -31,7 +31,7 @@ namespace Fugu.TableSets
             }
         }
 
-        public Task RemoveTableAsync(ITable table)
+        public Task RemoveTableAsync(IReadOnlyTable table)
         {
             var memoryTable = (InMemoryTable)table;
 
