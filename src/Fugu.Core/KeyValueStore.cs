@@ -77,10 +77,10 @@ namespace Fugu
 
             // Create actors accepting new writes to the store
             var writerActor = new WriterActorShell(
-                new WriterActorCore(bootstrapResult.MaxGenerationLoaded, indexActor.UpdateIndexBlock, segmentCreatedBuffer));
+                new WriterActorCore(indexActor.UpdateIndexBlock));
 
             var partitioningActor = new PartitioningActorShell(
-                new PartitioningActorCore(tableSet, writerActor.WriteBlock));
+                new PartitioningActorCore(bootstrapResult.MaxGenerationLoaded, tableSet, writerActor.WriteBlock, segmentCreatedBuffer));
 
             // Create actors enforcing balance invariants
             var evictionActor = new EvictionActorShell(

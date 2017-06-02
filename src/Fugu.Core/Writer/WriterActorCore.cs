@@ -12,65 +12,43 @@ namespace Fugu.Writer
     public sealed class WriterActorCore
     {
         private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
-        private readonly ITargetBlock<Segment> _segmentCreatedBlock;
 
-        private StateVector _clock;
-        private Segment _segment;
-        private Stream _outputStream;
+        private StateVector _clock = new StateVector();
         private TableWriter _tableWriter;
 
-        public WriterActorCore(
-            long maxGeneration,
-            ITargetBlock<UpdateIndexMessage> indexUpdateBlock,
-            ITargetBlock<Segment> segmentCreatedBlock)
+        public WriterActorCore(ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
             Guard.NotNull(indexUpdateBlock, nameof(indexUpdateBlock));
-            Guard.NotNull(segmentCreatedBlock, nameof(segmentCreatedBlock));
-
-            _clock = new StateVector(0, maxGeneration, 0);
             _indexUpdateBlock = indexUpdateBlock;
-            _segmentCreatedBlock = segmentCreatedBlock;
         }
 
         public async Task WriteAsync(
             StateVector clock,
             WriteBatch writeBatch,
-            ITable outputTable,
+            Segment outputSegment,
+            Stream outputStream,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             Guard.NotNull(writeBatch, nameof(writeBatch));
-            Guard.NotNull(outputTable, nameof(outputTable));
+            Guard.NotNull(outputSegment, nameof(outputSegment));
+            Guard.NotNull(outputStream, nameof(outputStream));
             Guard.NotNull(replyChannel, nameof(replyChannel));
 
-            _clock = StateVector.Max(_clock, clock);
-
-            // If the output table changes, we need to close the old output table and initialze the new segment
-            if (outputTable != _segment?.Table)
+            // If the output segment changes, we need to close the old output and initialze the new segment
+            if (_tableWriter?.BaseStream != outputStream)
             {
-                if (_segment != null)
+                if (_tableWriter != null)
                 {
-                    // Complete existing - note that we must make sure that all write have been flushed to disk before
-                    // we write the table footer, as its presence guarantees that all data has been written
-                    await _outputStream.FlushAsync().ConfigureAwait(false);
                     _tableWriter.WriteTableFooter();
+                    _tableWriter.BaseStream.Dispose();
                     _tableWriter.Dispose();
-                    _outputStream.Dispose();
-                    _tableWriter = null;
-                    _outputStream = null;
-                    _segment = null;
                 }
 
-                // Start new segment and notify observers
-                _clock = _clock.NextOutputGeneration();
-                _segment = new Segment(_clock.OutputGeneration, _clock.OutputGeneration, outputTable);
-                _segmentCreatedBlock.Post(_segment);
-
-                _outputStream = outputTable.GetOutputStream(0, outputTable.Capacity);
-                _tableWriter = new TableWriter(_outputStream);
-                _tableWriter.WriteTableHeader(_clock.OutputGeneration, _clock.OutputGeneration);
+                _tableWriter = new TableWriter(outputStream);
             }
 
             // Now get ready to write this batch
+            _clock = StateVector.Max(_clock, clock).NextCommit();
             var changes = writeBatch.Changes.ToArray();
 
             // Commit header
@@ -96,7 +74,7 @@ namespace Fugu.Writer
             {
                 if (writeBatchItem is WriteBatchItem.Put put)
                 {
-                    var valueEntry = new IndexEntry.Value(_segment, _outputStream.Position, put.Value.Length);
+                    var valueEntry = new IndexEntry.Value(outputSegment, _tableWriter.BaseStream.Position, put.Value.Length);
                     indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
 
                     // Write value
@@ -104,7 +82,7 @@ namespace Fugu.Writer
                 }
                 else
                 {
-                    var tombstoneEntry = new IndexEntry.Tombstone(_segment);
+                    var tombstoneEntry = new IndexEntry.Tombstone(outputSegment);
                     indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, tombstoneEntry));
                 }
             }
@@ -113,7 +91,9 @@ namespace Fugu.Writer
             _tableWriter.WriteCommitFooter();
 
             // Hand off to index actor
-            await _indexUpdateBlock.SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel)).ConfigureAwait(false);
+            await _indexUpdateBlock
+                .SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel))
+                .ConfigureAwait(false);
         }
     }
 }
