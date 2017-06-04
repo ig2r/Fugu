@@ -23,11 +23,9 @@ namespace Fugu.Partitioning
 
         private readonly ITableFactory _tableFactory;
         private readonly ITargetBlock<WriteToSegmentMessage> _writeBlock;
-        private readonly ITargetBlock<Segment> _segmentCreatedBlock;
 
         private StateVector _clock;
-        private Segment _outputSegment;
-        private Stream _outputStream;
+        private ITable _outputTable;
 
         // The space, in bytes, that's left in the current output table
         private long _spaceLeftInOutputTable = 0;
@@ -38,17 +36,14 @@ namespace Fugu.Partitioning
         public PartitioningActorCore(
             long maxGeneration,
             ITableFactory tableFactory,
-            ITargetBlock<WriteToSegmentMessage> writeBlock,
-            ITargetBlock<Segment> segmentCreatedBlock)
+            ITargetBlock<WriteToSegmentMessage> writeBlock)
         {
             Guard.NotNull(tableFactory, nameof(tableFactory));
             Guard.NotNull(writeBlock, nameof(writeBlock));
-            Guard.NotNull(segmentCreatedBlock, nameof(segmentCreatedBlock));
 
             _clock = new StateVector(0, maxGeneration, 0);
             _tableFactory = tableFactory;
             _writeBlock = writeBlock;
-            _segmentCreatedBlock = segmentCreatedBlock;
 
             _tableHeaderSize = Marshal.SizeOf<TableHeaderRecord>();
             _tableFooterSize = Marshal.SizeOf<TableFooterRecord>();
@@ -71,29 +66,17 @@ namespace Fugu.Partitioning
                 var requestedCapacity = Math.Max(requiredCapacity, desiredCapacity);
 
                 _clock = _clock.NextOutputGeneration();
-                var outputTable = await _tableFactory.CreateTableAsync(requestedCapacity).ConfigureAwait(false);
-                _outputSegment = new Segment(_clock.OutputGeneration, _clock.OutputGeneration, outputTable);
-                _outputStream = outputTable.GetOutputStream(0, outputTable.Capacity);
 
-                // Write table header; remaining content will be written by writer actor
-                using (var tableWriter = new TableWriter(_outputStream))
-                {
-                    tableWriter.WriteTableHeader(_outputSegment.MinGeneration, _outputSegment.MaxGeneration);
-                }
-
-                // Keep track of table sizes. Note that _outputTable.Capacity may in fact be larger than the requested capacity.
-                _totalCapacity += outputTable.Capacity;
-                _spaceLeftInOutputTable = outputTable.Capacity - _tableHeaderSize;
-
-                // Notify observers that a new segment has come into existence
-                _segmentCreatedBlock.Post(_outputSegment);
+                _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity).ConfigureAwait(false);
+                _totalCapacity += _outputTable.Capacity;
+                _spaceLeftInOutputTable = _outputTable.Capacity - _tableHeaderSize;
             }
 
             _spaceLeftInOutputTable -= requiredSpace;
 
             // Pass on write batch to writer actor
             await _writeBlock
-                .SendAsync(new WriteToSegmentMessage(_clock, writeBatch, _outputSegment, _outputStream, replyChannel))
+                .SendAsync(new WriteToSegmentMessage(_clock, writeBatch, _outputTable, replyChannel))
                 .ConfigureAwait(false);
         }
 

@@ -12,7 +12,7 @@ namespace Fugu.Writer
             Guard.NotNull(core, nameof(core));
 
             WriteBlock = new ActionBlock<WriteToSegmentMessage>(
-                msg => core.WriteAsync(msg.Clock, msg.WriteBatch, msg.OutputSegment, msg.OutputStream, msg.ReplyChannel),
+                msg => core.WriteAsync(msg.Clock, msg.WriteBatch, msg.OutputTable, msg.ReplyChannel),
                 new ExecutionDataflowBlockOptions { BoundedCapacity = KeyValueStore.DEFAULT_BOUNDED_CAPACITY });
         }
 

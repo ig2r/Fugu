@@ -11,7 +11,7 @@ namespace Fugu.Bootstrapping
     public class SegmentLoader : ISegmentLoader
     {
         private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
-        private readonly List<SegmentLoadResult> _loadedSegments = new List<SegmentLoadResult>();
+        private readonly List<Segment> _loadedSegments = new List<Segment>();
 
         public SegmentLoader(ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
@@ -19,7 +19,7 @@ namespace Fugu.Bootstrapping
             _indexUpdateBlock = indexUpdateBlock;
         }
 
-        public IReadOnlyList<SegmentLoadResult> LoadedSegments => _loadedSegments;
+        public IReadOnlyList<Segment> LoadedSegments => _loadedSegments;
 
         #region ISegmentLoader
 
@@ -39,8 +39,6 @@ namespace Fugu.Bootstrapping
             using (var stream = segment.Table.GetInputStream(0, segment.Table.Capacity))
             using (var parser = new SegmentParser(stream))
             {
-                long lastGoodPosition = 0;
-
                 try
                 {
                     while (await parser.ReadAsync())
@@ -54,15 +52,11 @@ namespace Fugu.Bootstrapping
                                 _indexUpdateBlock.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel)),
                                 replyChannel.Task);
                         }
-
-                        // Remember this position because we may need to resume writing from here if it turns out that
-                        // the remainder of the file is corrupt
-                        lastGoodPosition = stream.Position;
                     }
                 }
                 catch { }
 
-                _loadedSegments.Add(new SegmentLoadResult(segment, hasValidFooter, lastGoodPosition));
+                _loadedSegments.Add(segment);
                 return true;
             }
         }
