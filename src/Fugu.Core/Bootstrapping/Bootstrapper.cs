@@ -12,7 +12,8 @@ using System.Threading.Tasks.Dataflow;
 namespace Fugu.Bootstrapping
 {
     /// <summary>
-    /// Handles initialization of a new <see cref="KeyValueStore"/> instance.
+    /// Populates a <see cref="KeyValueStore"/> instance with data from a given table set by parsing the
+    /// tables contained therein and replaying the respective change events.
     /// </summary>
     public class Bootstrapper
     {
