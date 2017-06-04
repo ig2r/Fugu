@@ -6,15 +6,11 @@ namespace Fugu.Bootstrapping
 {
     public class BootstrapperResult
     {
-        public BootstrapperResult(long maxGenerationLoaded, IEnumerable<Segment> loadedSegments)
+        public BootstrapperResult(long maxGenerationLoaded)
         {
-            Guard.NotNull(loadedSegments, nameof(loadedSegments));
-
             MaxGenerationLoaded = maxGenerationLoaded;
-            LoadedSegments = loadedSegments.ToArray();
         }
 
         public long MaxGenerationLoaded { get; }
-        public IEnumerable<Segment> LoadedSegments { get; }
     }
 }
