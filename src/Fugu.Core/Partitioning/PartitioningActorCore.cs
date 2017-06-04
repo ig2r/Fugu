@@ -2,6 +2,7 @@
 using Fugu.Common;
 using Fugu.Format;
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -23,10 +24,8 @@ namespace Fugu.Partitioning
         private readonly ITableFactory _tableFactory;
         private readonly ITargetBlock<WriteToSegmentMessage> _writeBlock;
 
-        private StateVector _clock = new StateVector();
-
-        // The current table to which incoming commits are directed
-        private IOutputTable _outputTable;
+        private StateVector _clock;
+        private IWritableTable _outputTable;
 
         // The space, in bytes, that's left in the current output table
         private long _spaceLeftInOutputTable = 0;
@@ -34,11 +33,15 @@ namespace Fugu.Partitioning
         // The total capacity, in bytes, of all the tables that are currently in use
         private long _totalCapacity = 0;
 
-        public PartitioningActorCore(ITableFactory tableFactory, ITargetBlock<WriteToSegmentMessage> writeBlock)
+        public PartitioningActorCore(
+            long maxGeneration,
+            ITableFactory tableFactory,
+            ITargetBlock<WriteToSegmentMessage> writeBlock)
         {
             Guard.NotNull(tableFactory, nameof(tableFactory));
             Guard.NotNull(writeBlock, nameof(writeBlock));
 
+            _clock = new StateVector(0, maxGeneration, 0);
             _tableFactory = tableFactory;
             _writeBlock = writeBlock;
 
@@ -48,8 +51,6 @@ namespace Fugu.Partitioning
 
         public async Task CommitAsync(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
-            _clock = _clock.NextCommit();
-
             var requiredSpace = GetRequiredSpaceForWriteBatch(writeBatch);
 
             // If there isn't enough space left in the current output segment for the incoming write (or if there's
@@ -64,9 +65,9 @@ namespace Fugu.Partitioning
                 var desiredCapacity = MIN_CAPACITY + (long)(_totalCapacity * (SCALE_FACTOR - 1.0));
                 var requestedCapacity = Math.Max(requiredCapacity, desiredCapacity);
 
-                _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity).ConfigureAwait(false);
+                _clock = _clock.NextOutputGeneration();
 
-                // Keep track of table sizes. Note that _outputTable.Capacity may in fact be larger than the requested capacity.
+                _outputTable = await _tableFactory.CreateTableAsync(requestedCapacity).ConfigureAwait(false);
                 _totalCapacity += _outputTable.Capacity;
                 _spaceLeftInOutputTable = _outputTable.Capacity - _tableHeaderSize;
             }
@@ -74,7 +75,9 @@ namespace Fugu.Partitioning
             _spaceLeftInOutputTable -= requiredSpace;
 
             // Pass on write batch to writer actor
-            await _writeBlock.SendAsync(new WriteToSegmentMessage(_clock, writeBatch, _outputTable, replyChannel)).ConfigureAwait(false);
+            await _writeBlock
+                .SendAsync(new WriteToSegmentMessage(_clock, writeBatch, _outputTable, replyChannel))
+                .ConfigureAwait(false);
         }
 
         public void OnTotalCapacityChanged(long deltaCapacity)

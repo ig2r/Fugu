@@ -1,12 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Fugu.TableSets
 {
-    public class InMemoryTable : IOutputTable, ITable
+    public class InMemoryTable : IWritableTable
     {
         private readonly byte[] _buffer;
 
@@ -18,13 +15,10 @@ namespace Fugu.TableSets
             }
 
             Capacity = capacity;
-
             _buffer = new byte[Capacity];
-            OutputStream = new MemoryStream(_buffer);
         }
 
         public long Capacity { get; }
-        public Stream OutputStream { get; }
 
         public Stream GetInputStream(long position, long size)
         {
@@ -38,7 +32,22 @@ namespace Fugu.TableSets
                 throw new ArgumentOutOfRangeException(nameof(size));
             }
 
-            return new MemoryStream(_buffer, (int)position, (int)size);
+            return new MemoryStream(_buffer, (int)position, (int)size, writable: false);
+        }
+
+        public Stream GetOutputStream(long position, long size)
+        {
+            if (position > Capacity)
+            {
+                throw new ArgumentOutOfRangeException(nameof(position));
+            }
+
+            if (position + size > Capacity)
+            {
+                throw new ArgumentOutOfRangeException(nameof(size));
+            }
+
+            return new MemoryStream(_buffer, (int)position, (int)size, writable: true);
         }
     }
 }

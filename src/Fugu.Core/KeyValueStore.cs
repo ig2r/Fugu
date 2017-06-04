@@ -73,14 +73,15 @@ namespace Fugu
 
             // Bootstrap store state from given table set
             var bootstrapper = new Bootstrapper();
-            var bootstrapResult = await bootstrapper.RunAsync(tableSet, indexActor.UpdateIndexBlock).ConfigureAwait(false);
+            var bootstrapResult = await bootstrapper.RunAsync(
+                tableSet, indexActor.UpdateIndexBlock, segmentCreatedBuffer).ConfigureAwait(false);
 
             // Create actors accepting new writes to the store
             var writerActor = new WriterActorShell(
-                new WriterActorCore(bootstrapResult.MaxGenerationLoaded, indexActor.UpdateIndexBlock, segmentCreatedBuffer));
+                new WriterActorCore(indexActor.UpdateIndexBlock, segmentCreatedBuffer));
 
             var partitioningActor = new PartitioningActorShell(
-                new PartitioningActorCore(tableSet, writerActor.WriteBlock));
+                new PartitioningActorCore(bootstrapResult.MaxGenerationLoaded, tableSet, writerActor.WriteBlock));
 
             // Create actors enforcing balance invariants
             var evictionActor = new EvictionActorShell(
@@ -89,10 +90,7 @@ namespace Fugu
             var compactionActor = new CompactionActorShell(
                 new CompactionActorCore(
                     new RatioCompactionStrategy(4096, 2.0),
-                    //new AlwaysCompactCompactionStrategy(),
-                    //new VoidCompactionStrategy(),
                     tableSet,
-                    bootstrapResult.LoadedSegments,
                     evictionActor.EvictSegmentBlock,
                     partitioningActor.TotalCapacityChangedBlock,
                     indexActor.UpdateIndexBlock));

@@ -27,7 +27,7 @@ namespace Fugu.Format
             _input = input;
         }
 
-        public long Position => _input.Position;
+        public Stream BaseStream => _input;
 
         public byte ReadTag()
         {
