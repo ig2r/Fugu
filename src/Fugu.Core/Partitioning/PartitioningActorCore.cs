@@ -25,7 +25,7 @@ namespace Fugu.Partitioning
         private readonly ITargetBlock<WriteToSegmentMessage> _writeBlock;
 
         private StateVector _clock;
-        private ITable _outputTable;
+        private IWritableTable _outputTable;
 
         // The space, in bytes, that's left in the current output table
         private long _spaceLeftInOutputTable = 0;

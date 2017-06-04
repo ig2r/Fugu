@@ -2,8 +2,9 @@
 
 namespace Fugu
 {
-    public interface ITable : IReadOnlyTable
+    public interface ITable
     {
-        Stream GetOutputStream(long position, long size);
+        long Capacity { get; }
+        Stream GetInputStream(long position, long size);
     }
 }

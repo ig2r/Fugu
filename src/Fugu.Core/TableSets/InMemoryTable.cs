@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Fugu.TableSets
 {
-    public class InMemoryTable : ITable
+    public class InMemoryTable : IWritableTable
     {
         private readonly byte[] _buffer;
 

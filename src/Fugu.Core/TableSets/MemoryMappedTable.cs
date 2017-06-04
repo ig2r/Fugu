@@ -4,7 +4,7 @@ using System.IO.MemoryMappedFiles;
 
 namespace Fugu.TableSets
 {
-    public class MemoryMappedTable : ITable, IDisposable
+    public class MemoryMappedTable : IWritableTable, IDisposable
     {
         private readonly MemoryMappedFile _map;
 

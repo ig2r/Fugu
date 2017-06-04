@@ -31,7 +31,7 @@ namespace Fugu.Writer
         public async Task WriteAsync(
             StateVector clock,
             WriteBatch writeBatch,
-            ITable outputTable,
+            IWritableTable outputTable,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             Guard.NotNull(writeBatch, nameof(writeBatch));

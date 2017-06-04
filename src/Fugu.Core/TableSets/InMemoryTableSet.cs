@@ -11,7 +11,7 @@ namespace Fugu.TableSets
 
         #region ITableSet
 
-        public Task<ITable> CreateTableAsync(long capacity)
+        public Task<IWritableTable> CreateTableAsync(long capacity)
         {
             var table = new InMemoryTable(capacity);
 
@@ -20,7 +20,7 @@ namespace Fugu.TableSets
                 _tables.Add(table);
             }
 
-            return Task.FromResult<ITable>(table);
+            return Task.FromResult<IWritableTable>(table);
         }
 
         public Task<IEnumerable<ITable>> GetTablesAsync()
@@ -31,7 +31,7 @@ namespace Fugu.TableSets
             }
         }
 
-        public Task RemoveTableAsync(IReadOnlyTable table)
+        public Task RemoveTableAsync(ITable table)
         {
             var memoryTable = (InMemoryTable)table;
 
