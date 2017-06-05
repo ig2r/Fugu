@@ -2,7 +2,6 @@
 using Fugu.Common;
 using Fugu.Format;
 using System;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -13,10 +12,10 @@ namespace Fugu.Partitioning
     public class PartitioningActorCore
     {
         // The minimum capacity, in bytes, when allocating a new segment
-        private const long MIN_CAPACITY = 4096;
+        private const long MIN_CAPACITY = 1024 * 1024;
 
         // The factor by which each new segment should be larger than the previous one. Must be greater than 1.0.
-        private const double SCALE_FACTOR = 1.125;
+        private const double SCALE_FACTOR = 1.25;
 
         private readonly long _tableHeaderSize;
         private readonly long _tableFooterSize;
@@ -35,6 +34,7 @@ namespace Fugu.Partitioning
 
         public PartitioningActorCore(
             long maxGeneration,
+            long totalCapacity,
             ITableFactory tableFactory,
             ITargetBlock<WriteToSegmentMessage> writeBlock)
         {
@@ -42,6 +42,7 @@ namespace Fugu.Partitioning
             Guard.NotNull(writeBlock, nameof(writeBlock));
 
             _clock = new StateVector(0, maxGeneration, 0);
+            _totalCapacity = totalCapacity;
             _tableFactory = tableFactory;
             _writeBlock = writeBlock;
 

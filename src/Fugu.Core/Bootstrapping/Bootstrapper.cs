@@ -33,21 +33,22 @@ namespace Fugu.Bootstrapping
             // Scan segments to populate index
             var loadStrategy = new SegmentLoadStrategy(availableSegments);
             var loadedSegments = new List<Segment>();
-            long maxGenerationLoaded = 0;
+            long maxGeneration = 0;
 
-            while (loadStrategy.GetNext(maxGenerationLoaded, out var segment, out var requireValidFooter))
+            while (loadStrategy.GetNext(maxGeneration, out var segment, out var requireValidFooter))
             {
                 if (await TryLoadSegmentAsync(segment, requireValidFooter, indexUpdateBlock))
                 {
                     loadedSegments.Add(segment);
-                    maxGenerationLoaded = segment.MaxGeneration;
+                    maxGeneration = segment.MaxGeneration;
 
                     // Notify observers that a new segment is available
                     segmentCreatedBlock.Post(segment);
                 }
             }
 
-            return new BootstrapperResult(maxGenerationLoaded);
+            var totalCapacity = loadedSegments.Sum(s => s.Table.Capacity);
+            return new BootstrapperResult(maxGeneration, totalCapacity);
         }
 
         private async Task<IEnumerable<Segment>> GetAvailableSegmentsAsync(IEnumerable<ITable> tables)

@@ -1,9 +1,9 @@
-﻿using Fugu;
-using Fugu.TableSets;
+﻿using Fugu.TableSets;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Diagnostics;
-using System.Linq;
+using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -36,8 +36,12 @@ namespace Fugu.Core.IntegrationTests
             var data = new byte[256];
             new Random().NextBytes(data);
 
+            var assemblyPath = Assembly.GetEntryAssembly().Location;
+            var basePath = Path.Combine(Path.GetDirectoryName(assemblyPath), "Data");
+            Directory.CreateDirectory(basePath);
+
             //var tableSet = new InMemoryTableSet();
-            using (var tableSet = new MemoryMappedTableSet())
+            using (var tableSet = new MemoryMappedTableSet(basePath))
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             {
                 var stopwatch = Stopwatch.StartNew();
