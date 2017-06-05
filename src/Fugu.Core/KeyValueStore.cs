@@ -81,7 +81,7 @@ namespace Fugu
                 new WriterActorCore(indexActor.UpdateIndexBlock, segmentCreatedBuffer));
 
             var partitioningActor = new PartitioningActorShell(
-                new PartitioningActorCore(bootstrapResult.MaxGenerationLoaded, tableSet, writerActor.WriteBlock));
+                new PartitioningActorCore(bootstrapResult.MaxGeneration, bootstrapResult.TotalCapacity, tableSet, writerActor.WriteBlock));
 
             // Create actors enforcing balance invariants
             var evictionActor = new EvictionActorShell(
@@ -89,7 +89,7 @@ namespace Fugu
 
             var compactionActor = new CompactionActorShell(
                 new CompactionActorCore(
-                    new RatioCompactionStrategy(4096, 2.0),
+                    new RatioCompactionStrategy(1024 * 1024, 2.0),
                     tableSet,
                     evictionActor.EvictSegmentBlock,
                     partitioningActor.TotalCapacityChangedBlock,

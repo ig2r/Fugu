@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Fugu.Common;
+using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 
@@ -8,12 +9,24 @@ namespace Fugu.TableSets
     {
         private readonly MemoryMappedFile _map;
 
-        public MemoryMappedTable(long capacity)
+        public MemoryMappedTable(string path)
         {
-            Capacity = capacity;
-            _map = MemoryMappedFile.CreateNew(null, capacity);
+            Guard.NotNull(path, nameof(path));
+
+            Path = path;
+            Capacity = new FileInfo(path).Length;
+            _map = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
         }
 
+        public MemoryMappedTable(string path, long capacity)
+        {
+            Guard.NotNull(path, nameof(path));
+
+            Capacity = capacity;
+            _map = MemoryMappedFile.CreateFromFile(path, FileMode.OpenOrCreate, null, capacity, MemoryMappedFileAccess.ReadWrite);
+        }
+
+        public string Path { get; }
         public long Capacity { get; }
 
         public Stream GetInputStream(long position, long size)
