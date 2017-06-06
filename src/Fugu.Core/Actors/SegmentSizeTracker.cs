@@ -1,4 +1,5 @@
 ﻿using Fugu.Common;
+using Fugu.Format;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,14 +11,15 @@ namespace Fugu.Actors
     /// </summary>
     public class SegmentSizeTracker
     {
-        private readonly Dictionary<Segment, SegmentStats> _stats = new Dictionary<Segment, SegmentStats>();
+        private readonly SortedDictionary<Segment, SegmentStats> _stats =
+            new SortedDictionary<Segment, SegmentStats>(new SegmentGenerationComparer());
 
         public IReadOnlyList<KeyValuePair<Segment, SegmentStats>> Stats => _stats.ToArray();
 
         public void OnItemAdded(byte[] key, IndexEntry indexEntry)
         {
             var previous = GetStatsOrDefault(indexEntry.Segment);
-            var itemSize = Measure(key, indexEntry);
+            var itemSize = Measure.GetSize(key, indexEntry);
             _stats[indexEntry.Segment] = new SegmentStats(
                 previous.LiveBytes + itemSize,
                 previous.DeadBytes);
@@ -26,7 +28,7 @@ namespace Fugu.Actors
         public void OnItemRemoved(byte[] key, IndexEntry indexEntry)
         {
             var previous = GetStatsOrDefault(indexEntry.Segment);
-            var itemSize = Measure(key, indexEntry);
+            var itemSize = Measure.GetSize(key, indexEntry);
             _stats[indexEntry.Segment] = new SegmentStats(
                 previous.LiveBytes - itemSize,
                 previous.DeadBytes + itemSize);
@@ -35,7 +37,7 @@ namespace Fugu.Actors
         public void OnItemRejected(byte[] key, IndexEntry indexEntry)
         {
             var previous = GetStatsOrDefault(indexEntry.Segment);
-            var itemSize = Measure(key, indexEntry);
+            var itemSize = Measure.GetSize(key, indexEntry);
             _stats[indexEntry.Segment] = new SegmentStats(
                 previous.LiveBytes,
                 previous.DeadBytes + itemSize);
@@ -53,24 +55,30 @@ namespace Fugu.Actors
             }
         }
 
-        private static long Measure(byte[] key, IndexEntry indexEntry)
-        {
-            switch (indexEntry)
-            {
-                case IndexEntry.Value v:
-                    return key.Length + v.ValueLength;
-                case IndexEntry.Tombstone t:
-                    return key.Length;
-                default:
-                    throw new NotSupportedException();
-            }
-        }
-
         private SegmentStats GetStatsOrDefault(Segment segment)
         {
             return _stats.TryGetValue(segment, out var existing)
                 ? existing
                 : default(SegmentStats);
         }
+
+        #region Nested types
+
+        private class SegmentGenerationComparer : IComparer<Segment>
+        {
+            #region IComparer<Segment>
+
+            public int Compare(Segment x, Segment y)
+            {
+                var cmp = x.MinGeneration.CompareTo(y.MinGeneration);
+                return cmp != 0
+                    ? cmp
+                    : x.MaxGeneration.CompareTo(y.MaxGeneration);
+            }
+
+            #endregion
+        }
+
+        #endregion
     }
 }

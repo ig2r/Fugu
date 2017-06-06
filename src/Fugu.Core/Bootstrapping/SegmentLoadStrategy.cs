@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using Fugu.Common;
+using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace Fugu.Bootstrapping
 {
@@ -10,46 +10,47 @@ namespace Fugu.Bootstrapping
     /// </summary>
     public class SegmentLoadStrategy
     {
-        public async Task<IReadOnlyList<Segment>> RunAsync(IEnumerable<Segment> segments, ISegmentLoader tableLoader)
+        private readonly Queue<Segment> _queue;
+
+        public SegmentLoadStrategy(IEnumerable<Segment> segments)
         {
-            var ordered = (from s in segments
-                           orderby
-                             s.MinGeneration ascending,
-                             s.MaxGeneration descending
-                           select s).ToArray();
+            Guard.NotNull(segments, nameof(segments));
 
-            long maxGenerationLoaded = 0;
-            var loadedSegments = new List<Segment>();
+            // Process segments in order, giving preference to segments that span larger generation
+            // ranges since they are most likely more recent (e.g., created during compactions) than
+            // segments that span smaller ranges
+            _queue = new Queue<Segment>(
+                from s in segments
+                orderby
+                    s.MinGeneration ascending,
+                    s.MaxGeneration descending
+                select s);
+        }
 
-            for (int i = 0; i < ordered.Length; i++)
+        public bool GetNext(long maxGenerationLoaded, out Segment nextSegment, out bool requireValidFooter)
+        {
+            while (_queue.Count > 0)
             {
-                var current = ordered[i];
-                if (current.MinGeneration > maxGenerationLoaded)
+                nextSegment = _queue.Dequeue();
+
+                // Skip this segment if it contains data from a generation range we've already loaded
+                if (nextSegment.MaxGeneration <= maxGenerationLoaded)
                 {
-                    // This segment contains data from a generation we haven't touched yet, check if has a valid footer
-                    var hasFooter = await tableLoader.CheckTableFooterAsync(current.Table);
-
-                    if (!hasFooter)
-                    {
-                        var nextSegmentCoversSameGeneration =
-                            i < ordered.Length - 1 && ordered[i + 1].MinGeneration == current.MinGeneration;
-
-                        if (nextSegmentCoversSameGeneration)
-                        {
-                            // Skip this segment entirely
-                            continue;
-                        }
-                    }
-
-                    // Load data from this segment, verifying checksums only if the segment has no valid footer
-                    await tableLoader.LoadSegmentAsync(current, verifyChecksums: !hasFooter);
-
-                    maxGenerationLoaded = current.MaxGeneration;
-                    loadedSegments.Add(current);
+                    continue;
                 }
+
+                // If the following segment covers the same min generation range as the current segment,
+                // we can be picky and only accept data from the current segment if it contains a valid
+                // footer; if it doesn't, we'll just fall back to the next segment in line
+                requireValidFooter =
+                    _queue.Count > 0 &&
+                    nextSegment.MinGeneration == _queue.Peek().MinGeneration;
+                return true;
             }
 
-            return loadedSegments;
+            nextSegment = null;
+            requireValidFooter = false;
+            return false;
         }
     }
 }

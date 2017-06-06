@@ -1,4 +1,5 @@
 ﻿using Fugu.Actors;
+using Fugu.Common;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -9,16 +10,16 @@ namespace Fugu.Compaction
     {
         #region ICompactionStrategy
 
-        public bool TryGetRangeToCompact(IReadOnlyList<KeyValuePair<Segment, SegmentStats>> compactableSegments, out (int offset, int count) range)
+        public bool TryGetRangeToCompact(IReadOnlyList<SegmentStats> segmentStats, out Range range)
         {
-            if (compactableSegments.Count >= 2)
+            if (segmentStats.Count >= 2)
             {
-                range = (0, compactableSegments.Count);
+                range = new Range(0, segmentStats.Count);
                 return true;
             }
             else
             {
-                range = default((int, int));
+                range = default(Range);
                 return false;
             }
         }

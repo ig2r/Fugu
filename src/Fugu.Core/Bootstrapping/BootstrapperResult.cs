@@ -2,21 +2,28 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace Fugu.Bootstrapping
 {
     public class BootstrapperResult
     {
-        public BootstrapperResult(long maxGenerationLoaded, IEnumerable<Segment> loadedSegments)
+        public BootstrapperResult(long maxGeneration, long totalCapacity)
         {
-            Guard.NotNull(loadedSegments, nameof(loadedSegments));
+            if (maxGeneration < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxGeneration));
+            }
 
-            MaxGenerationLoaded = maxGenerationLoaded;
-            LoadedSegments = loadedSegments.ToArray();
+            if (totalCapacity < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(totalCapacity));
+            }
+
+            MaxGeneration = maxGeneration;
+            TotalCapacity = totalCapacity;
         }
 
-        public long MaxGenerationLoaded { get; }
-        public IEnumerable<Segment> LoadedSegments { get; }
+        public long MaxGeneration { get; }
+        public long TotalCapacity { get; }
     }
 }

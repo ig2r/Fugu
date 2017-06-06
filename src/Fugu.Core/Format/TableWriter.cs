@@ -15,30 +15,25 @@ namespace Fugu.Format
         // The default size, in bytes, of the buffer that is used to marshal C# structs to bytes.
         private const int MIN_STRUCTURE_BUFFER_SIZE = 256;
 
-        private readonly Stream _outputStream;
+        private readonly Stream _baseStream;
         private byte[] _buffer;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TableWriter"/> class.
         /// </summary>
-        /// <param name="outputStream">
+        /// <param name="baseStream">
         /// The output stream that instances of this class will write data to. When disposing the writer instance, the
         /// stream will remain open.
         /// </param>
-        public TableWriter(Stream outputStream)
+        public TableWriter(Stream baseStream)
         {
-            Guard.NotNull(outputStream, nameof(outputStream));
-            _outputStream = outputStream;
+            Guard.NotNull(baseStream, nameof(baseStream));
+            _baseStream = baseStream;
         }
 
-        public Stream OutputStream
+        public Stream BaseStream
         {
-            get { return _outputStream; }
-        }
-
-        public long Position
-        {
-            get { return _outputStream.Position; }
+            get { return _baseStream; }
         }
 
         public void WriteTableHeader(long minGeneration, long maxGeneration)
@@ -54,7 +49,7 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(headerRecord);
-            _outputStream.Write(data.Array, data.Offset, data.Count);
+            _baseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WriteTableFooter()
@@ -65,7 +60,7 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(footerRecord);
-            _outputStream.Write(data.Array, data.Offset, data.Count);
+            _baseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WriteCommitHeader(int count)
@@ -77,7 +72,7 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(commitHeaderRecord);
-            _outputStream.Write(data.Array, data.Offset, data.Count);
+            _baseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WriteCommitFooter()
@@ -88,7 +83,7 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(commitFooterRecord);
-            _outputStream.Write(data.Array, data.Offset, data.Count);
+            _baseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WritePut(byte[] key, int valueLength)
@@ -103,8 +98,8 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(putRecord);
-            _outputStream.Write(data.Array, data.Offset, data.Count);
-            _outputStream.Write(key, 0, key.Length);
+            _baseStream.Write(data.Array, data.Offset, data.Count);
+            _baseStream.Write(key, 0, key.Length);
         }
 
         public void WriteTombstone(byte[] key)
@@ -118,18 +113,18 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(tombstoneRecord);
-            _outputStream.Write(data.Array, data.Offset, data.Count);
-            _outputStream.Write(key, 0, key.Length);
+            _baseStream.Write(data.Array, data.Offset, data.Count);
+            _baseStream.Write(key, 0, key.Length);
         }
 
         public void Write(byte[] buffer)
         {
-            _outputStream.Write(buffer, 0, buffer.Length);
+            _baseStream.Write(buffer, 0, buffer.Length);
         }
 
         public Task WriteAsync(Stream sourceStream)
         {
-            return sourceStream.CopyToAsync(_outputStream);
+            return sourceStream.CopyToAsync(_baseStream);
         }
 
         #region IDisposable

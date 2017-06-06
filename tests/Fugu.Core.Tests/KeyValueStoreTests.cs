@@ -95,6 +95,21 @@ namespace Fugu.Core.Tests
         }
 
         [Fact]
+        public async Task CommitAsync_Put5000UniqueKeys_Succeeds()
+        {
+            var tableSet = new InMemoryTableSet();
+            using (var store = await KeyValueStore.CreateAsync(tableSet))
+            {
+                for (int i = 0; i < 5000; i++)
+                {
+                    var batch = new WriteBatch();
+                    batch.Put(Encoding.UTF8.GetBytes("key:" + i), Encoding.UTF8.GetBytes("value:1"));
+                    await store.CommitAsync(batch);
+                }
+            }
+        }
+
+        [Fact]
         public async Task GetSnapshotAsync_EmptyStore_Succeeds()
         {
             var tableSet = new InMemoryTableSet();

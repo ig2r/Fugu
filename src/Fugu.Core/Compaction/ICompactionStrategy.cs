@@ -1,12 +1,11 @@
 ﻿using Fugu.Actors;
-using System;
+using Fugu.Common;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Fugu.Compaction
 {
     public interface ICompactionStrategy
     {
-        bool TryGetRangeToCompact(IReadOnlyList<KeyValuePair<Segment, SegmentStats>> compactableSegments, out (int offset, int count) range);
+        bool TryGetRangeToCompact(IReadOnlyList<SegmentStats> segmentStats, out Range range);
     }
 }

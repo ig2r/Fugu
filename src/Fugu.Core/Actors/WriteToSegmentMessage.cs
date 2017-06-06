@@ -8,7 +8,7 @@ namespace Fugu.Actors
         public WriteToSegmentMessage(
             StateVector clock,
             WriteBatch writeBatch,
-            IOutputTable outputTable,
+            IWritableTable outputTable,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             Guard.NotNull(writeBatch, nameof(writeBatch));
@@ -23,7 +23,7 @@ namespace Fugu.Actors
 
         public StateVector Clock { get; }
         public WriteBatch WriteBatch { get; }
-        public IOutputTable OutputTable { get; }
+        public IWritableTable OutputTable { get; }
         public TaskCompletionSource<VoidTaskResult> ReplyChannel { get; }
     }
 }

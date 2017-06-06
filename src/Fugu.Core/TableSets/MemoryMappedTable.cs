@@ -1,29 +1,42 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Fugu.Common;
+using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Fugu.TableSets
 {
-    public class MemoryMappedTable : IOutputTable, IDisposable
+    public class MemoryMappedTable : IWritableTable, IDisposable
     {
         private readonly MemoryMappedFile _map;
 
-        public MemoryMappedTable(long capacity)
+        public MemoryMappedTable(string path)
         {
-            Capacity = capacity;
-            _map = MemoryMappedFile.CreateNew(null, capacity);
-            OutputStream = _map.CreateViewStream();
+            Guard.NotNull(path, nameof(path));
+
+            Path = path;
+            Capacity = new FileInfo(path).Length;
+            _map = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
         }
 
+        public MemoryMappedTable(string path, long capacity)
+        {
+            Guard.NotNull(path, nameof(path));
+
+            Capacity = capacity;
+            _map = MemoryMappedFile.CreateFromFile(path, FileMode.OpenOrCreate, null, capacity, MemoryMappedFileAccess.ReadWrite);
+        }
+
+        public string Path { get; }
         public long Capacity { get; }
-        public Stream OutputStream { get; }
 
         public Stream GetInputStream(long position, long size)
         {
             return _map.CreateViewStream(position, size, MemoryMappedFileAccess.Read);
+        }
+
+        public Stream GetOutputStream(long position, long size)
+        {
+            return _map.CreateViewStream(position, size, MemoryMappedFileAccess.Write);
         }
 
         public void Dispose()
@@ -35,7 +48,6 @@ namespace Fugu.TableSets
         {
             if (disposing)
             {
-                OutputStream?.Dispose();
                 _map.Dispose();
             }
         }

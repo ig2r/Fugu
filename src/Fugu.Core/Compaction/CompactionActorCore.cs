@@ -22,21 +22,18 @@ namespace Fugu.Compaction
         private readonly ITargetBlock<TotalCapacityChangedMessage> _totalCapacityChangedBlock;
         private readonly ITargetBlock<UpdateIndexMessage> _updateIndexBlock;
 
-        private readonly HashSet<Segment> _activeSegments;
-
+        private readonly HashSet<Segment> _activeSegments = new HashSet<Segment>();
         private StateVector _compactionThreshold;
 
         public CompactionActorCore(
             ICompactionStrategy compactionStrategy,
             ITableFactory tableFactory,
-            IEnumerable<Segment> loadedSegments,
             ITargetBlock<EvictSegmentMessage> evictSegmentBlock,
             ITargetBlock<TotalCapacityChangedMessage> totalCapacityChangedBlock,
             ITargetBlock<UpdateIndexMessage> updateIndexBlock)
         {
             Guard.NotNull(compactionStrategy, nameof(compactionStrategy));
             Guard.NotNull(tableFactory, nameof(tableFactory));
-            Guard.NotNull(loadedSegments, nameof(loadedSegments));
             Guard.NotNull(evictSegmentBlock, nameof(evictSegmentBlock));
             Guard.NotNull(totalCapacityChangedBlock, nameof(totalCapacityChangedBlock));
             Guard.NotNull(updateIndexBlock, nameof(updateIndexBlock));
@@ -46,8 +43,6 @@ namespace Fugu.Compaction
             _evictSegmentBlock = evictSegmentBlock;
             _totalCapacityChangedBlock = totalCapacityChangedBlock;
             _updateIndexBlock = updateIndexBlock;
-
-            _activeSegments = new HashSet<Segment>(loadedSegments);
         }
 
         public void OnSegmentCreated(Segment segment)
@@ -72,9 +67,12 @@ namespace Fugu.Compaction
             await EvictUnusedSegmentsAsync(clock, stats);
 
             // Check if we need to compact a range of segments
-            var compactableStats = stats
+            var compactableSegments = stats
                 .Where(kvp => kvp.Key.MaxGeneration < clock.OutputGeneration)
-                .OrderBy(kvp => kvp.Key.MinGeneration)
+                .ToArray();
+
+            var compactableStats = compactableSegments
+                .Select(kvp => kvp.Value)
                 .ToArray();
 
             if (_compactionStrategy.TryGetRangeToCompact(compactableStats, out var range))
@@ -84,8 +82,8 @@ namespace Fugu.Compaction
                 _compactionThreshold = clock.NextCompaction();
 
                 // Get items from index that need to go into the newly compacted segment
-                var minGeneration = compactableStats[range.offset].Key.MinGeneration;
-                var maxGeneration = compactableStats[range.offset + range.count - 1].Key.MaxGeneration;
+                var minGeneration = compactableSegments[range.Offset].Key.MinGeneration;
+                var maxGeneration = compactableSegments[range.Offset + range.Count - 1].Key.MaxGeneration;
 
                 var query = from kvp in index
                             let segment = kvp.Value.Segment
@@ -96,7 +94,7 @@ namespace Fugu.Compaction
                 var requiredCapacity =
                     Marshal.SizeOf<TableHeaderRecord>() +
                     Marshal.SizeOf<CommitHeaderRecord>() +
-                    query.Select(Measure).Sum() +
+                    query.Select(kvp => Measure.GetSize(kvp.Key, kvp.Value)).Sum() +
                     Marshal.SizeOf<CommitFooterRecord>() +
                     Marshal.SizeOf<TableFooterRecord>();
 
@@ -105,7 +103,8 @@ namespace Fugu.Compaction
                 var outputSegment = new Segment(minGeneration, maxGeneration, outputTable);
                 _activeSegments.Add(outputSegment);
 
-                using (var tableWriter = new TableWriter(outputTable.OutputStream))
+                using (var outputStream = outputTable.GetOutputStream(0, outputTable.Capacity))
+                using (var tableWriter = new TableWriter(outputStream))
                 {
                     tableWriter.WriteTableHeader(minGeneration, maxGeneration);
                     tableWriter.WriteCommitHeader(query.Count());
@@ -134,13 +133,13 @@ namespace Fugu.Compaction
                         switch (indexEntry)
                         {
                             case IndexEntry.Value src:
-                                var valueEntry = new IndexEntry.Value(outputSegment, tableWriter.Position, src.ValueLength);
+                                var valueEntry = new IndexEntry.Value(outputSegment, outputStream.Position, src.ValueLength);
                                 indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
 
                                 // Copy data
                                 using (var inputStream = src.Segment.Table.GetInputStream(src.Offset, src.ValueLength))
                                 {
-                                    inputStream.CopyTo(tableWriter.OutputStream);
+                                    inputStream.CopyTo(outputStream);
                                 }
 
                                 break;
@@ -187,21 +186,6 @@ namespace Fugu.Compaction
             if (deltaCapacity != 0)
             {
                 await _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(deltaCapacity)).ConfigureAwait(false);
-            }
-        }
-
-        private long Measure(KeyValuePair<byte[], IndexEntry> indexItem)
-        {
-            long size = indexItem.Key.Length;
-
-            switch (indexItem.Value)
-            {
-                case IndexEntry.Value value:
-                    return size + Marshal.SizeOf<PutRecord>() + value.ValueLength;
-                case IndexEntry.Tombstone tombstone:
-                    return size + Marshal.SizeOf<TombstoneRecord>();
-                default:
-                    throw new NotSupportedException();
             }
         }
     }
