@@ -4,6 +4,7 @@ using Fugu.Format;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -13,6 +14,8 @@ namespace Fugu.Writer
     {
         private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
         private readonly ITargetBlock<Segment> _segmentCreatedBlock;
+
+        private readonly IncrementalHash _md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
 
         private StateVector _clock = new StateVector();
         private Segment _outputSegment;
@@ -78,6 +81,9 @@ namespace Fugu.Writer
                 {
                     _tableWriter.WriteTombstone(key);
                 }
+
+                // Include in hash for error checking
+                _md5.AppendData(key);
             }
 
             // Second pass: write payload and assemble index updates
@@ -92,6 +98,7 @@ namespace Fugu.Writer
 
                     // Write value
                     _tableWriter.Write(put.Value);
+                    _md5.AppendData(put.Value);
                 }
                 else
                 {
@@ -101,7 +108,10 @@ namespace Fugu.Writer
             }
 
             // Commit footer
-            _tableWriter.WriteCommitFooter();
+            var hash = _md5.GetHashAndReset();
+            uint checksum = hash[0] | (uint)(hash[1] << 8) | (uint)(hash[2] << 16) | (uint)(hash[3] << 24);
+
+            _tableWriter.WriteCommitFooter(checksum);
 
             // Hand off to index actor
             await _indexUpdateBlock

@@ -15,7 +15,6 @@ namespace Fugu.Format
         // The default size, in bytes, of the buffer that is used to marshal C# structs to bytes.
         private const int MIN_STRUCTURE_BUFFER_SIZE = 256;
 
-        private readonly Stream _baseStream;
         private byte[] _buffer;
 
         /// <summary>
@@ -28,13 +27,10 @@ namespace Fugu.Format
         public TableWriter(Stream baseStream)
         {
             Guard.NotNull(baseStream, nameof(baseStream));
-            _baseStream = baseStream;
+            BaseStream = baseStream;
         }
 
-        public Stream BaseStream
-        {
-            get { return _baseStream; }
-        }
+        public Stream BaseStream { get; }
 
         public void WriteTableHeader(long minGeneration, long maxGeneration)
         {
@@ -49,7 +45,7 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(headerRecord);
-            _baseStream.Write(data.Array, data.Offset, data.Count);
+            BaseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WriteTableFooter()
@@ -60,7 +56,7 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(footerRecord);
-            _baseStream.Write(data.Array, data.Offset, data.Count);
+            BaseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WriteCommitHeader(int count)
@@ -72,18 +68,18 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(commitHeaderRecord);
-            _baseStream.Write(data.Array, data.Offset, data.Count);
+            BaseStream.Write(data.Array, data.Offset, data.Count);
         }
 
-        public void WriteCommitFooter()
+        public void WriteCommitFooter(uint commitChecksum)
         {
             var commitFooterRecord = new CommitFooterRecord
             {
-                CommitChecksum = 0,
+                CommitChecksum = commitChecksum,
             };
 
             var data = StructureToArray(commitFooterRecord);
-            _baseStream.Write(data.Array, data.Offset, data.Count);
+            BaseStream.Write(data.Array, data.Offset, data.Count);
         }
 
         public void WritePut(byte[] key, int valueLength)
@@ -98,8 +94,8 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(putRecord);
-            _baseStream.Write(data.Array, data.Offset, data.Count);
-            _baseStream.Write(key, 0, key.Length);
+            BaseStream.Write(data.Array, data.Offset, data.Count);
+            BaseStream.Write(key, 0, key.Length);
         }
 
         public void WriteTombstone(byte[] key)
@@ -113,18 +109,18 @@ namespace Fugu.Format
             };
 
             var data = StructureToArray(tombstoneRecord);
-            _baseStream.Write(data.Array, data.Offset, data.Count);
-            _baseStream.Write(key, 0, key.Length);
+            BaseStream.Write(data.Array, data.Offset, data.Count);
+            BaseStream.Write(key, 0, key.Length);
         }
 
         public void Write(byte[] buffer)
         {
-            _baseStream.Write(buffer, 0, buffer.Length);
+            BaseStream.Write(buffer, 0, buffer.Length);
         }
 
         public Task WriteAsync(Stream sourceStream)
         {
-            return sourceStream.CopyToAsync(_baseStream);
+            return sourceStream.CopyToAsync(BaseStream);
         }
 
         #region IDisposable

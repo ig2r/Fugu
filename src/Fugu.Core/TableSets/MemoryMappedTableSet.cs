@@ -48,8 +48,7 @@ namespace Fugu.TableSets
 
         public Task RemoveTableAsync(ITable table)
         {
-            var memoryMappedTable = table as MemoryMappedTable;
-            if (memoryMappedTable != null)
+            if (table is MemoryMappedTable memoryMappedTable)
             {
                 bool proceedWithRemoval;
                 lock (_tables)

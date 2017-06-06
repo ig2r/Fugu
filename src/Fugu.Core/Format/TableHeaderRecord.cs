@@ -10,6 +10,6 @@ namespace Fugu.Format
         public ushort FormatVersionMinor { get; set; }
         public long MinGeneration { get; set; }
         public long MaxGeneration { get; set; }
-        public ulong HeaderChecksum { get; set; }
+        public uint HeaderChecksum { get; set; }
     }
 }
