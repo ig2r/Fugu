@@ -1,11 +1,11 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
 using Fugu.Format;
-using Fugu.Index;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -110,7 +110,7 @@ namespace Fugu.Bootstrapping
                         // Scan for commit headers, then parse commits into collection of index updates
                         if (parser.Current == SegmentParserTokenType.CommitHeader)
                         {
-                            var indexUpdates = await ParseCommitAsync(segment, stream, parser);
+                            var indexUpdates = await ParseCommitAsync(segment, stream, parser, verifyChecksum: !hasValidFooter);
                             var replyChannel = new TaskCompletionSource<VoidTaskResult>();
                             await Task.WhenAll(
                                 indexUpdateBlock.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel)),
@@ -153,10 +153,13 @@ namespace Fugu.Bootstrapping
         private async Task<IReadOnlyList<KeyValuePair<byte[], IndexEntry>>> ParseCommitAsync(
             Segment segment,
             Stream stream,
-            SegmentParser parser)
+            SegmentParser parser,
+            bool verifyChecksum)
         {
             var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>();
             var putKeys = new Queue<byte[]>();
+
+            var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
 
             while (await parser.ReadAsync())
             {
@@ -166,6 +169,12 @@ namespace Fugu.Bootstrapping
                         {
                             var key = await parser.ReadPutOrTombstoneKeyAsync();
                             putKeys.Enqueue(key);
+
+                            if (verifyChecksum)
+                            {
+                                md5.AppendData(key);
+                            }
+
                             break;
                         }
                     case SegmentParserTokenType.Tombstone:
@@ -175,6 +184,12 @@ namespace Fugu.Bootstrapping
                                 new KeyValuePair<byte[], IndexEntry>(
                                     key,
                                     new IndexEntry.Tombstone(segment)));
+
+                            if (verifyChecksum)
+                            {
+                                md5.AppendData(key);
+                            }
+
                             break;
                         }
                     case SegmentParserTokenType.Value:
@@ -186,11 +201,29 @@ namespace Fugu.Bootstrapping
                                 new KeyValuePair<byte[], IndexEntry>(
                                     key,
                                     new IndexEntry.Value(segment, offset, value.Length)));
+
+                            if (verifyChecksum)
+                            {
+                                md5.AppendData(value);
+                            }
+
                             break;
                         }
                     case SegmentParserTokenType.CommitFooter:
                         {
-                            await parser.ReadCommitFooterAsync();
+                            var commitFooter = await parser.ReadCommitFooterAsync();
+
+                            if (verifyChecksum)
+                            {
+                                var hash = md5.GetHashAndReset();
+                                uint checksum = hash[0] | (uint)(hash[1] << 8) | (uint)(hash[2] << 16) | (uint)(hash[3] << 24);
+
+                                if (checksum != commitFooter.CommitChecksum)
+                                {
+                                    throw new InvalidDataException("Mismatched checksum, this indicates possible data corruption.");
+                                }
+                            }
+
                             return indexUpdates;
                         }
                     default:
