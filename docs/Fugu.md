@@ -44,7 +44,7 @@
         Format version (minor)  : uint16
         Min generation          : int64
         Max generation          : int64
-        Header checksum         : uint64 - verifies integrity of table header
+        Header checksum         : uint32 - verifies integrity of table header
 
     Commit ::= CommitHeader {Put, Tombstone}* PutValue* CommitFooter
 
@@ -67,7 +67,7 @@
         Value data (bytes)      : variable
 
     CommitFooter ::=
-        Commit checksum         : uint64 - verifies integrity of key and value data
+        Commit checksum         : uint32 - verifies integrity of key and value data
 
     TableFooter ::=
         Tag                     : uint8

@@ -151,7 +151,7 @@ namespace Fugu.Compaction
                     }
 
                     // Finish output segment
-                    tableWriter.WriteCommitFooter();
+                    tableWriter.WriteCommitFooter(0);
                     tableWriter.WriteTableFooter();
 
                     // Notify environment
