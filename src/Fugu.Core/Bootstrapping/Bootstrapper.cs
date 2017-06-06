@@ -47,6 +47,10 @@ namespace Fugu.Bootstrapping
                 }
             }
 
+            // Discard tables we didn't load
+            var unusedTables = tables.Except(loadedSegments.Select(s => s.Table));
+            await Task.WhenAll(unusedTables.Select(tableSet.RemoveTableAsync));
+
             var totalCapacity = loadedSegments.Sum(s => s.Table.Capacity);
             return new BootstrapperResult(maxGeneration, totalCapacity);
         }
