@@ -41,8 +41,7 @@ namespace Fugu.Common
         {
             get
             {
-                TValue value;
-                if (!TryGetValue(key, out value))
+                if (!TryGetValue(key, out var value))
                 {
                     throw new KeyNotFoundException();
                 }

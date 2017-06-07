@@ -11,7 +11,9 @@ namespace Fugu.Core.Benchmarks
                 .AddCommandLine(args)
                 .Build();
 
-            BenchmarkRunner.Run<SimpleCommitBenchmark>();
+            BenchmarkRunner.Run<CritBitTreeInsertionBenchmark>();
+            //BenchmarkRunner.Run<ByteArrayEqualityBenchmark>();
+            //BenchmarkRunner.Run<SimpleCommitBenchmark>();
             //new SimpleCommitBenchmark { DegreeOfConcurrency = 1 }.Commit1000Batches().Wait();
         }
     }

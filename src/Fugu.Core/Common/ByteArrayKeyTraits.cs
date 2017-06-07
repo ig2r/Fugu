@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 
 namespace Fugu.Common
 {
@@ -50,7 +49,25 @@ namespace Fugu.Common
 
         public bool Equals(byte[] key1, byte[] key2)
         {
-            return StructuralComparisons.StructuralEqualityComparer.Equals(key1, key2);
+            if (ReferenceEquals(key1, key2))
+            {
+                return true;
+            }
+
+            if (key1.Length != key2.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < key1.Length; i++)
+            {
+                if (key1[i] != key2[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }
