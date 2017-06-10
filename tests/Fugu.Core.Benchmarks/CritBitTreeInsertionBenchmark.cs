@@ -15,8 +15,8 @@ namespace Fugu.Core.Benchmarks
 
         public const int ITEM_COUNT = 10000;
 
-        [Setup]
-        public void Setup()
+        [GlobalSetup]
+        public void GlobalSetup()
         {
             _keys.Clear();
             for (int i = 0; i < ITEM_COUNT; i++)

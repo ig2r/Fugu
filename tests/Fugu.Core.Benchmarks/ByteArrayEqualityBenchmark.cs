@@ -11,8 +11,8 @@ namespace Fugu.Core.Benchmarks
     {
         private readonly List<byte[]> _data = new List<byte[]>();
 
-        [Setup]
-        public void Setup()
+        [GlobalSetup]
+        public void GlobalSetup()
         {
             const int N = 10;
             var random = new Random();
