@@ -22,6 +22,7 @@ namespace Fugu.TableSets
         {
             Guard.NotNull(path, nameof(path));
 
+            Path = path;
             Capacity = capacity;
             _map = MemoryMappedFile.CreateFromFile(path, FileMode.OpenOrCreate, null, capacity, MemoryMappedFileAccess.ReadWrite);
         }
