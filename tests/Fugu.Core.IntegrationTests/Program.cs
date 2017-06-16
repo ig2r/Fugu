@@ -72,6 +72,8 @@ namespace Fugu.Core.IntegrationTests
                 stopwatch.Stop();
                 double opsPerSecond = 1000 * items / stopwatch.ElapsedMilliseconds;
                 Console.WriteLine($"Took {stopwatch.ElapsedMilliseconds} ms, that's {opsPerSecond} op/s");
+
+                await store.CloseAsync();
             }
         }
 
