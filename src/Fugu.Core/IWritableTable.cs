@@ -1,9 +1,10 @@
-﻿using System.IO;
+﻿using Fugu.Format;
+using System.IO;
 
 namespace Fugu
 {
     public interface IWritableTable : ITable
     {
-        Stream GetOutputStream(long position, long size);
+        TableWriter GetWriter();
     }
 }

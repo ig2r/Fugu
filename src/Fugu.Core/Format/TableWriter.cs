@@ -1,37 +1,12 @@
 ﻿using Fugu.Common;
 using System;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Text;
 
 namespace Fugu.Format
 {
-    /// <summary>
-    /// Provides functionality to compose a Fugu storage file by writing the building blocks of the storage format
-    /// to an output stream.
-    /// </summary>
-    public sealed class TableWriter : IDisposable
+    public abstract class TableWriter : IDisposable
     {
-        // The default size, in bytes, of the buffer that is used to marshal C# structs to bytes.
-        private const int MIN_STRUCTURE_BUFFER_SIZE = 256;
-
-        private byte[] _buffer;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TableWriter"/> class.
-        /// </summary>
-        /// <param name="baseStream">
-        /// The output stream that instances of this class will write data to. When disposing the writer instance, the
-        /// stream will remain open.
-        /// </param>
-        public TableWriter(Stream baseStream)
-        {
-            Guard.NotNull(baseStream, nameof(baseStream));
-            BaseStream = baseStream;
-        }
-
-        public Stream BaseStream { get; }
-
         public void WriteTableHeader(long minGeneration, long maxGeneration)
         {
             var headerRecord = new TableHeaderRecord
@@ -44,9 +19,10 @@ namespace Fugu.Format
                 HeaderChecksum = 0,     // TODO: Calculate for Magic, Major, Minor, generations
             };
 
-            var data = StructureToArray(headerRecord);
-            BaseStream.Write(data.Array, data.Offset, data.Count);
+            WriteTableHeaderCore(headerRecord);
         }
+
+        public abstract long Position { get; }
 
         public void WriteTableFooter()
         {
@@ -55,8 +31,7 @@ namespace Fugu.Format
                 Tag = TableRecordType.TableFooter,
             };
 
-            var data = StructureToArray(footerRecord);
-            BaseStream.Write(data.Array, data.Offset, data.Count);
+            WriteTableFooterCore(footerRecord);
         }
 
         public void WriteCommitHeader(int count)
@@ -67,8 +42,7 @@ namespace Fugu.Format
                 Count = count
             };
 
-            var data = StructureToArray(commitHeaderRecord);
-            BaseStream.Write(data.Array, data.Offset, data.Count);
+            WriteCommitHeaderCore(commitHeaderRecord);
         }
 
         public void WriteCommitFooter(uint commitChecksum)
@@ -78,8 +52,7 @@ namespace Fugu.Format
                 CommitChecksum = commitChecksum,
             };
 
-            var data = StructureToArray(commitFooterRecord);
-            BaseStream.Write(data.Array, data.Offset, data.Count);
+            WriteCommitFooterCore(commitFooterRecord);
         }
 
         public void WritePut(byte[] key, int valueLength)
@@ -93,9 +66,7 @@ namespace Fugu.Format
                 ValueLength = valueLength
             };
 
-            var data = StructureToArray(putRecord);
-            BaseStream.Write(data.Array, data.Offset, data.Count);
-            BaseStream.Write(key, 0, key.Length);
+            WritePutCore(putRecord, key);
         }
 
         public void WriteTombstone(byte[] key)
@@ -108,46 +79,33 @@ namespace Fugu.Format
                 KeyLength = (short)key.Length
             };
 
-            var data = StructureToArray(tombstoneRecord);
-            BaseStream.Write(data.Array, data.Offset, data.Count);
-            BaseStream.Write(key, 0, key.Length);
+            WriteTombstoneCore(tombstoneRecord, key);
         }
 
-        public void Write(byte[] buffer)
+        public void Write(byte[] buffer, int sourceIndex, int length)
         {
-            BaseStream.Write(buffer, 0, buffer.Length);
-        }
-
-        public Task WriteAsync(Stream sourceStream)
-        {
-            return sourceStream.CopyToAsync(BaseStream);
+            WriteArrayCore(buffer, sourceIndex, length);
         }
 
         #region IDisposable
 
         public void Dispose()
         {
-            _buffer = null;
+            Dispose(true);
         }
 
         #endregion
 
-        private ArraySegment<byte> StructureToArray<T>(T structure)
-            where T : struct
+        protected abstract void WriteTableHeaderCore(TableHeaderRecord headerRecord);
+        protected abstract void WriteTableFooterCore(TableFooterRecord footerRecord);
+        protected abstract void WriteCommitHeaderCore(CommitHeaderRecord commitHeaderRecord);
+        protected abstract void WriteCommitFooterCore(CommitFooterRecord commitFooterRecord);
+        protected abstract void WritePutCore(PutRecord putRecord, byte[] key);
+        protected abstract void WriteTombstoneCore(TombstoneRecord tombstoneRecord, byte[] key);
+        protected abstract void WriteArrayCore(byte[] buffer, int sourceIndex, int length);
+
+        protected virtual void Dispose(bool disposing)
         {
-            // Make sure the buffer is large enough to hold the structure
-            var size = Marshal.SizeOf<T>();
-            if (_buffer == null || _buffer.Length < size)
-            {
-                _buffer = new byte[Math.Max(size, MIN_STRUCTURE_BUFFER_SIZE)];
-            }
-
-            // Marshal to byte[] representation
-            var handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-            Marshal.StructureToPtr(structure, handle.AddrOfPinnedObject(), false);
-            handle.Free();
-
-            return new ArraySegment<byte>(_buffer, 0, size);
         }
     }
 }

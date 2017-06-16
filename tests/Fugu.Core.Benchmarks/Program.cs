@@ -11,13 +11,18 @@ namespace Fugu.Core.Benchmarks
                 .AddCommandLine(args)
                 .Build();
 
+            //var benchmark = new KeyValueStoreBenchmark { DegreeOfConcurrency = 8 };
+            //benchmark.IterationSetup();
+            //benchmark.PutUniqueKeys().Wait();
+            //benchmark.IterationCleanup();
 
             BenchmarkRunner.Run<KeyValueStoreBenchmark>();
+
+            //BenchmarkRunner.Run<WriterActorBenchmark>();
+            //BenchmarkRunner.Run<FormatMmapBenchmark>();
             //BenchmarkRunner.Run<WriteMmapBenchmark>();
             //BenchmarkRunner.Run<CritBitTreeInsertionBenchmark>();
             //BenchmarkRunner.Run<ByteArrayEqualityBenchmark>();
-            //BenchmarkRunner.Run<SimpleCommitBenchmark>();
-            //new SimpleCommitBenchmark { DegreeOfConcurrency = 1 }.Commit1000Batches().Wait();
         }
     }
 }

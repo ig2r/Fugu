@@ -74,13 +74,20 @@ namespace Fugu.Bootstrapping
             return segments;
         }
 
-        private async Task<Segment> ReadTableHeaderAsync(ITable table)
+        private Task<Segment> ReadTableHeaderAsync(ITable table)
         {
-            using (var input = table.GetInputStream(0, table.Capacity))
-            using (var reader = new TableReader(input))
+            try
             {
-                var header = await reader.ReadTableHeaderAsync();
-                return new Segment(header.MinGeneration, header.MaxGeneration, table);
+                using (var reader = table.GetReader(0, table.Capacity))
+                {
+                    var header = reader.ReadTableHeader();
+                    var segment = new Segment(header.MinGeneration, header.MaxGeneration, table);
+                    return Task.FromResult(segment);
+                }
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<Segment>(ex);
             }
         }
 
@@ -92,7 +99,7 @@ namespace Fugu.Bootstrapping
             Guard.NotNull(segment, nameof(segment));
 
             // First pass over segment to find out if the table holds a valid table footer
-            var hasValidFooter = await TryFindTableFooterAsync(segment);
+            var hasValidFooter = TryFindTableFooter(segment);
             if (!hasValidFooter && requireValidFooter)
             {
                 return false;
@@ -100,17 +107,18 @@ namespace Fugu.Bootstrapping
 
             // Second pass over segment to load data into the index. If no valid footer was found during the first
             // pass, we also need to verify integrity via checksums.
-            using (var stream = segment.Table.GetInputStream(0, segment.Table.Capacity))
-            using (var parser = new SegmentParser(stream))
+            using (var reader = segment.Table.GetReader(0, segment.Table.Capacity))
             {
+                var parser = new SegmentParser(reader);
+                    
                 try
                 {
-                    while (await parser.ReadAsync())
+                    while (parser.Read())
                     {
                         // Scan for commit headers, then parse commits into collection of index updates
                         if (parser.Current == SegmentParserTokenType.CommitHeader)
                         {
-                            var indexUpdates = await ParseCommitAsync(segment, stream, parser, verifyChecksum: !hasValidFooter);
+                            var indexUpdates = ParseCommit(segment, reader, parser, verifyChecksum: !hasValidFooter);
                             var replyChannel = new TaskCompletionSource<VoidTaskResult>();
                             await Task.WhenAll(
                                 indexUpdateBlock.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel)),
@@ -123,20 +131,21 @@ namespace Fugu.Bootstrapping
             }
         }
 
-        private async Task<bool> TryFindTableFooterAsync(Segment segment)
+        private bool TryFindTableFooter(Segment segment)
         {
-            using (var stream = segment.Table.GetInputStream(0, segment.Table.Capacity))
-            using (var parser = new SegmentParser(stream))
+            using (var reader = segment.Table.GetReader(0, segment.Table.Capacity))
             {
+                var parser = new SegmentParser(reader);
+
                 try
                 {
-                    while (await parser.ReadAsync())
+                    while (parser.Read())
                     {
                         switch (parser.Current)
                         {
                             case SegmentParserTokenType.TableFooter:
                                 // TODO: verify checksum
-                                await parser.ReadTableFooterAsync();
+                                parser.ReadTableFooter();
                                 return true;
                         }
                     }
@@ -150,9 +159,9 @@ namespace Fugu.Bootstrapping
             }
         }
 
-        private async Task<IReadOnlyList<KeyValuePair<byte[], IndexEntry>>> ParseCommitAsync(
+        private IReadOnlyList<KeyValuePair<byte[], IndexEntry>> ParseCommit(
             Segment segment,
-            Stream stream,
+            TableReader reader,
             SegmentParser parser,
             bool verifyChecksum)
         {
@@ -161,13 +170,13 @@ namespace Fugu.Bootstrapping
 
             var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
 
-            while (await parser.ReadAsync())
+            while (parser.Read())
             {
                 switch (parser.Current)
                 {
                     case SegmentParserTokenType.Put:
                         {
-                            var key = await parser.ReadPutOrTombstoneKeyAsync();
+                            var key = parser.ReadPutOrTombstoneKey();
                             putKeys.Enqueue(key);
 
                             if (verifyChecksum)
@@ -179,7 +188,7 @@ namespace Fugu.Bootstrapping
                         }
                     case SegmentParserTokenType.Tombstone:
                         {
-                            var key = await parser.ReadPutOrTombstoneKeyAsync();
+                            var key = parser.ReadPutOrTombstoneKey();
                             indexUpdates.Add(
                                 new KeyValuePair<byte[], IndexEntry>(
                                     key,
@@ -195,8 +204,8 @@ namespace Fugu.Bootstrapping
                     case SegmentParserTokenType.Value:
                         {
                             var key = putKeys.Dequeue();
-                            var offset = stream.Position;
-                            var value = await parser.ReadValueAsync();
+                            var offset = reader.Position;
+                            var value = parser.ReadValue();
                             indexUpdates.Add(
                                 new KeyValuePair<byte[], IndexEntry>(
                                     key,
@@ -211,7 +220,7 @@ namespace Fugu.Bootstrapping
                         }
                     case SegmentParserTokenType.CommitFooter:
                         {
-                            var commitFooter = await parser.ReadCommitFooterAsync();
+                            var commitFooter = parser.ReadCommitFooter();
 
                             if (verifyChecksum)
                             {

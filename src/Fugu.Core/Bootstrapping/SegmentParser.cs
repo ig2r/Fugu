@@ -2,12 +2,10 @@
 using Fugu.Format;
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace Fugu.Bootstrapping
 {
-    public class SegmentParser : IDisposable
+    public class SegmentParser
     {
         private readonly TableReader _reader;
 
@@ -15,31 +13,22 @@ namespace Fugu.Bootstrapping
         private int _remainingElementsInCommitHeader = 0;
         private readonly Queue<PutRecord> _queuedPuts = new Queue<PutRecord>();
 
-        public SegmentParser(Stream input)
+        public SegmentParser(TableReader reader)
         {
-            Guard.NotNull(input, nameof(input));
-            _reader = new TableReader(input);
+            Guard.NotNull(reader, nameof(reader));
+            _reader = reader;
         }
 
         public SegmentParserTokenType Current { get; private set; } = SegmentParserTokenType.NotStarted;
 
-        #region IDisposable
-
-        public void Dispose()
-        {
-            _reader.Dispose();
-        }
-
-        #endregion
-
         // Reads the next node from the input stream, or return false if no more data is available
-        public async Task<bool> ReadAsync()
+        public bool Read()
         {
             // If the calling code has not otherwise acted upon this token, we consume it to advance
             // the position in the underlying stream and apply its side-effects
             if (!_consumedCurrentToken)
             {
-                await ConsumeCurrentTokenAsync();
+                ConsumeCurrentToken();
             }
 
             // Transition to next token
@@ -76,33 +65,33 @@ namespace Fugu.Bootstrapping
             }
         }
 
-        public Task<TableHeaderRecord> ReadTableHeaderAsync()
+        public TableHeaderRecord ReadTableHeader()
         {
             MarkCurrentTokenConsumed();
-            return _reader.ReadTableHeaderAsync();
+            return _reader.ReadTableHeader();
         }
 
-        public Task<TableFooterRecord> ReadTableFooterAsync()
+        public TableFooterRecord ReadTableFooter()
         {
             MarkCurrentTokenConsumed();
-            return _reader.ReadTableFooterAsync();
+            return _reader.ReadTableFooter();
         }
 
-        public async Task<CommitHeaderRecord> ReadCommitHeaderAsync()
+        public CommitHeaderRecord ReadCommitHeader()
         {
             MarkCurrentTokenConsumed();
-            var commitHeader = await _reader.ReadCommitHeaderAsync();
+            var commitHeader = _reader.ReadCommitHeader();
             _remainingElementsInCommitHeader = commitHeader.Count;
             return commitHeader;
         }
 
-        public Task<CommitFooterRecord> ReadCommitFooterAsync()
+        public CommitFooterRecord ReadCommitFooter()
         {
             MarkCurrentTokenConsumed();
-            return _reader.ReadCommitFooterAsync();
+            return _reader.ReadCommitFooter();
         }
 
-        public async Task<byte[]> ReadPutOrTombstoneKeyAsync()
+        public byte[] ReadPutOrTombstoneKey()
         {
             MarkCurrentTokenConsumed();
 
@@ -111,14 +100,14 @@ namespace Fugu.Bootstrapping
             {
                 case SegmentParserTokenType.Put:
                     {
-                        var putRecord = await _reader.ReadPutAsync();
+                        var putRecord = _reader.ReadPut();
                         keyLength = putRecord.KeyLength;
                         _queuedPuts.Enqueue(putRecord);
                         break;
                     }
                 case SegmentParserTokenType.Tombstone:
                     {
-                        var tombstoneRecord = await _reader.ReadTombstoneAsync();
+                        var tombstoneRecord = _reader.ReadTombstone();
                         keyLength = tombstoneRecord.KeyLength;
                         break;
                     }
@@ -127,15 +116,15 @@ namespace Fugu.Bootstrapping
             }
 
             _remainingElementsInCommitHeader--;
-            var key = await _reader.ReadBytesAsync(keyLength);
+            var key = _reader.ReadBytes(keyLength);
             return key;
         }
 
-        public Task<byte[]> ReadValueAsync()
+        public byte[] ReadValue()
         {
             MarkCurrentTokenConsumed();
             var putRecord = _queuedPuts.Dequeue();
-            return _reader.ReadBytesAsync(putRecord.ValueLength);
+            return _reader.ReadBytes(putRecord.ValueLength);
         }
 
         private void MarkCurrentTokenConsumed()
@@ -148,32 +137,38 @@ namespace Fugu.Bootstrapping
             _consumedCurrentToken = true;
         }
 
-        private Task ConsumeCurrentTokenAsync()
+        private void ConsumeCurrentToken()
         {
             switch (Current)
             {
                 case SegmentParserTokenType.TableHeader:
-                    return ReadTableHeaderAsync();
+                    ReadTableHeader();
+                    break;
                 case SegmentParserTokenType.CommitHeader:
-                    return ReadCommitHeaderAsync();
+                    ReadCommitHeader();
+                    break;
                 case SegmentParserTokenType.Put:
                 case SegmentParserTokenType.Tombstone:
-                    return ReadPutOrTombstoneKeyAsync();
+                    ReadPutOrTombstoneKey();
+                    break;
                 case SegmentParserTokenType.Value:
-                    return ReadValueAsync();
+                    ReadValue();
+                    break;
                 case SegmentParserTokenType.CommitFooter:
-                    return ReadCommitFooterAsync();
+                    ReadCommitFooter();
+                    break;
                 case SegmentParserTokenType.TableFooter:
-                    return ReadTableFooterAsync();
+                    ReadTableFooter();
+                    break;
                 default:
                     MarkCurrentTokenConsumed();
-                    return Task.CompletedTask;
+                    break;
             }
         }
 
         private void ExpectCommitOrTableFooter()
         {
-            switch ((TableRecordType)_reader.ReadTag())
+            switch ((TableRecordType)_reader.GetTag())
             {
                 case TableRecordType.CommitHeader:
                     Current = SegmentParserTokenType.CommitHeader;
@@ -192,7 +187,7 @@ namespace Fugu.Bootstrapping
             if (_remainingElementsInCommitHeader > 0)
             {
                 // Expect a put or tombstone
-                switch ((CommitRecordType)_reader.ReadTag())
+                switch ((CommitRecordType)_reader.GetTag())
                 {
                     case CommitRecordType.Put:
                         Current = SegmentParserTokenType.Put;

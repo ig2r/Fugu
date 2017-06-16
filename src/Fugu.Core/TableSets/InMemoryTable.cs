@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using Fugu.Common;
+using Fugu.Format;
 
 namespace Fugu.TableSets
 {
@@ -14,28 +16,24 @@ namespace Fugu.TableSets
                 throw new ArgumentOutOfRangeException(nameof(capacity));
             }
 
+            if (capacity > int.MaxValue)
+            {
+                throw new InvalidOperationException($"InMemoryTable supports a maximum capacity of ${int.MaxValue} bytes.");
+            }
+
             Capacity = capacity;
             _buffer = new byte[Capacity];
         }
 
         public long Capacity { get; }
 
-        public Stream GetInputStream(long position, long size)
+        public TableWriter GetWriter()
         {
-            if (position > Capacity)
-            {
-                throw new ArgumentOutOfRangeException(nameof(position));
-            }
-
-            if (position + size > Capacity)
-            {
-                throw new ArgumentOutOfRangeException(nameof(size));
-            }
-
-            return new MemoryStream(_buffer, (int)position, (int)size, writable: false);
+            var span = new ManagedByteSpan(_buffer);
+            return new ByteSpanTableWriter<ManagedByteSpan>(span);
         }
 
-        public Stream GetOutputStream(long position, long size)
+        public TableReader GetReader(long position, long size)
         {
             if (position > Capacity)
             {
@@ -47,7 +45,8 @@ namespace Fugu.TableSets
                 throw new ArgumentOutOfRangeException(nameof(size));
             }
 
-            return new MemoryStream(_buffer, (int)position, (int)size, writable: true);
+            var span = new ManagedByteSpan(_buffer, (int)position, (int)size);
+            return new ByteSpanTableReader<ManagedByteSpan>(span);
         }
     }
 }

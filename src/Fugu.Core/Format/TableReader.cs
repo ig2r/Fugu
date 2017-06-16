@@ -1,141 +1,73 @@
-﻿using Fugu.Common;
-using System;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace Fugu.Format
 {
-    /// <summary>
-    /// Tokenizes a table data stream.
-    /// </summary>
-    public class TableReader : IDisposable
+    public abstract class TableReader : IDisposable
     {
-        private readonly Stream _input;
-        private readonly byte[] _buffer = new byte[256];
+        public abstract long Position { get; }
 
-        private bool _isDisposed = false;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TableReader"/> class.
-        /// </summary>
-        /// <param name="input">Source stream holding elements to read. The current instance takes ownership
-        /// of this stream, i.e., it is disposed when the current instance is disposed.</param>
-        public TableReader(Stream input)
+        public byte GetTag()
         {
-            Guard.NotNull(input, nameof(input));
-            _input = input;
+            return GetTagCore();
         }
 
-        public Stream BaseStream => _input;
-
-        public byte ReadTag()
+        public TableHeaderRecord ReadTableHeader()
         {
-            var tag = _input.ReadByte();
-            if (tag < 0)
-            {
-                throw new InvalidOperationException("No more data in stream.");
-            }
-
-            return (byte)tag;
+            return ReadTableHeaderCore();
         }
 
-        public Task<TableHeaderRecord> ReadTableHeaderAsync()
+        public CommitHeaderRecord ReadCommitHeader()
         {
-            return ReadStructureAsync<TableHeaderRecord>(skip: 0);
+            return ReadCommitHeaderCore();
         }
 
-        public Task<CommitHeaderRecord> ReadCommitHeaderAsync()
+        public PutRecord ReadPut()
         {
-            return ReadStructureAsync<CommitHeaderRecord>(skip: 1);
+            return ReadPutCore();
         }
 
-        public Task<PutRecord> ReadPutAsync()
+        public TombstoneRecord ReadTombstone()
         {
-            return ReadStructureAsync<PutRecord>(skip: 1);
+            return ReadTombstoneCore();
         }
 
-        public Task<TombstoneRecord> ReadTombstoneAsync()
+        public byte[] ReadBytes(int count)
         {
-            return ReadStructureAsync<TombstoneRecord>(skip: 1);
+            return ReadBytesCore(count);
         }
 
-        public async Task<byte[]> ReadBytesAsync(int count)
+        public CommitFooterRecord ReadCommitFooter()
         {
-            var buffer = new byte[count];
-            var idx = 0;
-            while (idx < count)
-            {
-                var read = await _input.ReadAsync(buffer, idx, count - idx);
-                if (read <= 0)
-                {
-                    throw new InvalidOperationException("Could not read enough bytes from stream.");
-                }
-
-                idx += read;
-            }
-
-            return buffer;
+            return ReadCommitFooterCore();
         }
 
-        public void SkipBytes(long count)
+        public TableFooterRecord ReadTableFooter()
         {
-            _input.Seek(count, SeekOrigin.Current);
-        }
-
-        public Task<CommitFooterRecord> ReadCommitFooterAsync()
-        {
-            return ReadStructureAsync<CommitFooterRecord>(skip: 0);
-        }
-
-        public Task<TableFooterRecord> ReadTableFooterAsync()
-        {
-            return ReadStructureAsync<TableFooterRecord>(skip: 1);
+            return ReadTableFooterCore();
         }
 
         #region IDisposable
 
         public void Dispose()
         {
-            _input.Dispose();
-            _isDisposed = true;
+            Dispose(true);
         }
 
         #endregion
 
-        private async Task<T> ReadStructureAsync<T>(int skip)
-            where T : struct
+        protected virtual void Dispose(bool disposing)
         {
-            int toRead = Marshal.SizeOf<T>();
-            int offset = skip;
-
-            // Read remaining bytes from stream
-            while (offset < toRead)
-            {
-                int read = await _input.ReadAsync(_buffer, offset, toRead - offset).ConfigureAwait(false);
-
-                if (read <= 0)
-                {
-                    throw new IOException("Unexpected end of stream.");
-                }
-
-                offset += read;
-            }
-
-            // Interpret raw bytes as a struct instance
-            var handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-            T structure = Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject());
-            handle.Free();
-
-            return structure;
         }
 
-        private void ThrowIfDisposed()
-        {
-            if (_isDisposed)
-            {
-                throw new ObjectDisposedException(GetType().Name);
-            }
-        }
+        protected abstract byte GetTagCore();
+        protected abstract TableHeaderRecord ReadTableHeaderCore();
+        protected abstract CommitHeaderRecord ReadCommitHeaderCore();
+        protected abstract PutRecord ReadPutCore();
+        protected abstract TombstoneRecord ReadTombstoneCore();
+        protected abstract byte[] ReadBytesCore(int count);
+        protected abstract CommitFooterRecord ReadCommitFooterCore();
+        protected abstract TableFooterRecord ReadTableFooterCore();
     }
 }

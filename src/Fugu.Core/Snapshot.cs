@@ -23,13 +23,12 @@ namespace Fugu
 
         public StateVector Clock { get; }
 
-        public async Task<byte[]> TryGetValueAsync(byte[] key)
+        public byte[] TryGetValue(byte[] key)
         {
             Guard.NotNull(key, nameof(key));
             ThrowIfDisposed();
 
-            IndexEntry indexEntry;
-            if (!_index.TryGetValue(key, out indexEntry))
+            if (!_index.TryGetValue(key, out var indexEntry))
             {
                 // Index contains no entry for that key
                 return null;
@@ -42,25 +41,10 @@ namespace Fugu
                 return null;
             }
 
-            var buffer = new byte[valueIndexEntry.ValueLength];
-
-            using (var inputStream = valueIndexEntry.Segment.Table.GetInputStream(valueIndexEntry.Offset, valueIndexEntry.ValueLength))
+            using (var reader = valueIndexEntry.Segment.Table.GetReader(valueIndexEntry.Offset, valueIndexEntry.ValueLength))
             {
-                int bytesRead = 0;
-                while (bytesRead < valueIndexEntry.ValueLength)
-                {
-                    int n = await inputStream.ReadAsync(buffer, bytesRead, valueIndexEntry.ValueLength - bytesRead).ConfigureAwait(false);
-
-                    if (n <= 0)
-                    {
-                        throw new InvalidOperationException("Failed to read value from input stream.");
-                    }
-
-                    bytesRead += n;
-                }
+                return reader.ReadBytes(valueIndexEntry.ValueLength);
             }
-
-            return buffer;
         }
 
         #region IDisposable

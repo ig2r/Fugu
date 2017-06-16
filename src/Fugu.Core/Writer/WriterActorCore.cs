@@ -2,7 +2,6 @@
 using Fugu.Common;
 using Fugu.Format;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -31,7 +30,7 @@ namespace Fugu.Writer
             _segmentCreatedBlock = segmentCreatedBlock;
         }
 
-        public async Task WriteAsync(
+        public Task WriteAsync(
             StateVector clock,
             WriteBatch writeBatch,
             IWritableTable outputTable,
@@ -47,10 +46,7 @@ namespace Fugu.Writer
                 if (_tableWriter != null)
                 {
                     _tableWriter.WriteTableFooter();
-                    _tableWriter.BaseStream.Dispose();
                     _tableWriter.Dispose();
-                    _tableWriter = null;
-                    _outputSegment = null;
                 }
 
                 // Create new segment and notify observers
@@ -58,8 +54,7 @@ namespace Fugu.Writer
                 _segmentCreatedBlock.Post(_outputSegment);
 
                 // Prepare output
-                var outputStream = outputTable.GetOutputStream(0, outputTable.Capacity);
-                _tableWriter = new TableWriter(outputStream);
+                _tableWriter = outputTable.GetWriter();
                 _tableWriter.WriteTableHeader(_outputSegment.MinGeneration, _outputSegment.MaxGeneration);
             }
 
@@ -93,11 +88,11 @@ namespace Fugu.Writer
             {
                 if (writeBatchItem is WriteBatchItem.Put put)
                 {
-                    var valueEntry = new IndexEntry.Value(_outputSegment, _tableWriter.BaseStream.Position, put.Value.Length);
+                    var valueEntry = new IndexEntry.Value(_outputSegment, _tableWriter.Position, put.Value.Length);
                     indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
 
                     // Write value
-                    _tableWriter.Write(put.Value);
+                    _tableWriter.Write(put.Value, 0, put.Value.Length);
                     _md5.AppendData(put.Value);
                 }
                 else
@@ -114,9 +109,7 @@ namespace Fugu.Writer
             _tableWriter.WriteCommitFooter(checksum);
 
             // Hand off to index actor
-            await _indexUpdateBlock
-                .SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel))
-                .ConfigureAwait(false);
+            return _indexUpdateBlock.SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel));
         }
     }
 }

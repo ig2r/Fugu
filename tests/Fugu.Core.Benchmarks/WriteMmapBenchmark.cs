@@ -1,4 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
+using Fugu.Common;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 
@@ -28,16 +29,6 @@ namespace Fugu.Core.Benchmarks
             _mmap.Dispose();
         }
 
-        [IterationSetup]
-        public void IterationSetup()
-        {
-        }
-
-        [IterationCleanup]
-        public void IterationCleanup()
-        {
-        }
-
         [Benchmark]
         public void ViewStream()
         {
@@ -57,15 +48,38 @@ namespace Fugu.Core.Benchmarks
             }
         }
 
-        [Benchmark]
-        public unsafe void UnsafePointer()
+        [Benchmark(Baseline = true)]
+        public void UnsafePointer()
         {
-            byte* ptr = null;
-            _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+            unsafe
+            {
+                byte* ptr = null;
+                _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+
+                for (int i = 0; i < CAPACITY; i++)
+                {
+                    *(ptr + i) = 0xFF;
+                }
+            }
+
+            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+
+        [Benchmark]
+        public void UnmanagedByteSpan()
+        {
+            UnmanagedByteSpan span;
+
+            unsafe
+            {
+                byte* ptr = null;
+                _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+                span = new UnmanagedByteSpan(ptr, CAPACITY);
+            }
 
             for (int i = 0; i < CAPACITY; i++)
             {
-                *ptr = 0xFF;
+                span[i] = 0xFF;
             }
 
             _accessor.SafeMemoryMappedViewHandle.ReleasePointer();

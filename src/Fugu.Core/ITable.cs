@@ -1,10 +1,10 @@
-﻿using System.IO;
+﻿using Fugu.Format;
 
 namespace Fugu
 {
     public interface ITable
     {
         long Capacity { get; }
-        Stream GetInputStream(long position, long size);
+        TableReader GetReader(long position, long size);
     }
 }

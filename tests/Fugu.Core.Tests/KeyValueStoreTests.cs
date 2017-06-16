@@ -139,7 +139,7 @@ namespace Fugu.Core.Tests
                 // Assert
                 using (var snapshot = await store.GetSnapshotAsync())
                 {
-                    var retrieved = await snapshot.TryGetValueAsync(key1);
+                    var retrieved = snapshot.TryGetValue(key1);
                     Assert.Equal<byte>(value1, retrieved);
                 }
             }
