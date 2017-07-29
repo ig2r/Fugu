@@ -7,7 +7,7 @@ namespace Fugu.Actors
     {
         public SnapshotsUpdateMessage(
             StateVector clock,
-            CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index,
+            AaTree<IndexEntry> index,
             TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             // Note that replyChannel is an optional parameter and may be null
@@ -19,7 +19,7 @@ namespace Fugu.Actors
         }
 
         public StateVector Clock { get; }
-        public CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> Index { get; }
+        public AaTree<IndexEntry> Index { get; }
         public TaskCompletionSource<VoidTaskResult> ReplyChannel { get; }
     }
 }

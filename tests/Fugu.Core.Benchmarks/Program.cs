@@ -16,12 +16,18 @@ namespace Fugu.Core.Benchmarks
             //benchmark.PutUniqueKeys().Wait();
             //benchmark.IterationCleanup();
 
+            //var benchmark = new IndexActorBenchmark();
+            //benchmark.IterationSetup();
+            //benchmark.UpdateIndexAsync().Wait();
+
             BenchmarkRunner.Run<KeyValueStoreBenchmark>();
 
+            //BenchmarkRunner.Run<ArrayAllocationBenchmark>();
+            //BenchmarkRunner.Run<IndexActorBenchmark>();
             //BenchmarkRunner.Run<WriterActorBenchmark>();
             //BenchmarkRunner.Run<FormatMmapBenchmark>();
             //BenchmarkRunner.Run<WriteMmapBenchmark>();
-            //BenchmarkRunner.Run<CritBitTreeInsertionBenchmark>();
+            //BenchmarkRunner.Run<IndexInsertionBenchmark>();
             //BenchmarkRunner.Run<ByteArrayEqualityBenchmark>();
         }
     }

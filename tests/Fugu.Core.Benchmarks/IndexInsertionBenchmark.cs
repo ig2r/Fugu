@@ -8,12 +8,13 @@ using System.Text;
 namespace Fugu.Core.Benchmarks
 {
     //[MemoryDiagnoser]
-    public class CritBitTreeInsertionBenchmark
+    public class IndexInsertionBenchmark
     {
         private readonly Random _random = new Random();
         private readonly List<byte[]> _keys = new List<byte[]>();
 
         public const int ITEM_COUNT = 10000;
+        public const int BATCH_SIZE = 5;
 
         [GlobalSetup]
         public void GlobalSetup()
@@ -21,41 +22,56 @@ namespace Fugu.Core.Benchmarks
             _keys.Clear();
             for (int i = 0; i < ITEM_COUNT; i++)
             {
-                var key = $"bucket:{_random.Next(256)}/key:{_random.Next(256)}/facet:{_random.Next(256)}";
+                var key = $"bucket:{_random.Next(32)}/key:{_random.Next(32)}";
                 _keys.Add(Encoding.UTF8.GetBytes(key));
             }
         }
 
-        [Benchmark(OperationsPerInvoke = ITEM_COUNT)]
-        public void InsertIntoCritBitTree()
+        [Benchmark(OperationsPerInvoke = ITEM_COUNT, Baseline = true)]
+        public void InsertIntoAaTree()
         {
-            var tree = CritBitTree<ByteArrayKeyTraits, byte[], int>.Empty;
+            var builder = new AaTree<int>.Builder();
 
-            for (int i = 0; i < _keys.Count; i++)
+            for (int i = 0; i < _keys.Count; i += BATCH_SIZE)
             {
-                tree = tree.SetItem(_keys[i], i);
+                for (int j = 0; j < BATCH_SIZE; j++)
+                {
+                    builder[_keys[i + j]] = i;
+                }
+
+                var dict = builder.ToImmutable();
             }
         }
 
         [Benchmark(OperationsPerInvoke = ITEM_COUNT)]
         public void InsertIntoImmutableDictionary()
         {
-            var dict = ImmutableDictionary.Create<byte[], int>(new ByteArrayEqualityComparer());
+            var builder = ImmutableDictionary.CreateBuilder<byte[], int>(new ByteArrayEqualityComparer());
 
-            for (int i = 0; i < _keys.Count; i++)
+            for (int i = 0; i < _keys.Count; i += BATCH_SIZE)
             {
-                dict = dict.SetItem(_keys[i], i);
+                for (int j = 0; j < BATCH_SIZE; j++)
+                {
+                    builder[_keys[i + j]] = i;
+                }
+
+                var dict = builder.ToImmutable();
             }
         }
 
         [Benchmark(OperationsPerInvoke = ITEM_COUNT)]
         public void InsertIntoImmutableSortedDictionary()
         {
-            var dict = ImmutableSortedDictionary.Create<byte[], int>(new ByteArrayComparer());
+            var builder = ImmutableSortedDictionary.CreateBuilder<byte[], int>(new ByteArrayComparer());
 
-            for (int i = 0; i < _keys.Count; i++)
+            for (int i = 0; i < _keys.Count; i += BATCH_SIZE)
             {
-                dict = dict.SetItem(_keys[i], i);
+                for (int j = 0; j < BATCH_SIZE; j++)
+                {
+                    builder[_keys[i + j]] = i;
+                }
+
+                var dict = builder.ToImmutable();
             }
         }
 

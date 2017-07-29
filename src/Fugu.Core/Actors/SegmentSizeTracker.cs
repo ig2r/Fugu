@@ -1,6 +1,4 @@
-﻿using Fugu.Common;
-using Fugu.Format;
-using System;
+﻿using Fugu.Format;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -14,52 +12,58 @@ namespace Fugu.Actors
         private readonly SortedDictionary<Segment, SegmentStats> _stats =
             new SortedDictionary<Segment, SegmentStats>(new SegmentGenerationComparer());
 
+        // Segments in this set had their live byte count at zero at some point, and must be considered for pruning
+        private readonly HashSet<Segment> _pruningCandidates = new HashSet<Segment>();
+
         public IReadOnlyList<KeyValuePair<Segment, SegmentStats>> Stats => _stats.ToArray();
 
         public void OnItemAdded(byte[] key, IndexEntry indexEntry)
         {
-            var previous = GetStatsOrDefault(indexEntry.Segment);
             var itemSize = Measure.GetSize(key, indexEntry);
-            _stats[indexEntry.Segment] = new SegmentStats(
-                previous.LiveBytes + itemSize,
-                previous.DeadBytes);
+            UpdateStats(indexEntry.Segment, deltaLiveBytes: itemSize);
         }
 
         public void OnItemRemoved(byte[] key, IndexEntry indexEntry)
         {
-            var previous = GetStatsOrDefault(indexEntry.Segment);
             var itemSize = Measure.GetSize(key, indexEntry);
-            _stats[indexEntry.Segment] = new SegmentStats(
-                previous.LiveBytes - itemSize,
-                previous.DeadBytes + itemSize);
+            UpdateStats(indexEntry.Segment, deltaLiveBytes: -itemSize, deltaDeadBytes: itemSize);
         }
 
         public void OnItemRejected(byte[] key, IndexEntry indexEntry)
         {
-            var previous = GetStatsOrDefault(indexEntry.Segment);
             var itemSize = Measure.GetSize(key, indexEntry);
-            _stats[indexEntry.Segment] = new SegmentStats(
-                previous.LiveBytes,
-                previous.DeadBytes + itemSize);
+            UpdateStats(indexEntry.Segment, deltaDeadBytes: itemSize);
         }
 
         public void Prune()
         {
-            var prunedSegments = (from s in _stats
-                                  where s.Value.LiveBytes == 0
-                                  select s.Key).ToArray();
-
-            foreach (var s in prunedSegments)
+            foreach (var segment in _pruningCandidates)
             {
-                _stats.Remove(s);
+                if (_stats[segment].LiveBytes == 0)
+                {
+                    _stats.Remove(segment);
+                }
             }
+
+            _pruningCandidates.Clear();
         }
 
-        private SegmentStats GetStatsOrDefault(Segment segment)
+        private void UpdateStats(Segment segment, long deltaLiveBytes = 0, long deltaDeadBytes = 0)
         {
-            return _stats.TryGetValue(segment, out var existing)
+            var stats = _stats.TryGetValue(segment, out var existing)
                 ? existing
                 : default(SegmentStats);
+
+            stats = new SegmentStats(
+                stats.LiveBytes + deltaLiveBytes,
+                stats.DeadBytes + deltaDeadBytes);
+
+            _stats[segment] = stats;
+
+            if (stats.LiveBytes == 0)
+            {
+                _pruningCandidates.Add(segment);
+            }
         }
 
         #region Nested types

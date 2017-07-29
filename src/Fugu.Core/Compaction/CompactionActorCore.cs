@@ -54,7 +54,7 @@ namespace Fugu.Compaction
         public async Task OnSegmentStatsChangedAsync(
             StateVector clock,
             IReadOnlyList<KeyValuePair<Segment, SegmentStats>> stats,
-            CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index)
+            AaTree<IndexEntry> index)
         {
             // If the given clock has not yet surpassed the bar set by a previous compaction, stop here. This is important
             // so that we don't interleave compactions

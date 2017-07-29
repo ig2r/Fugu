@@ -1,17 +1,16 @@
 ﻿using Fugu.Common;
 using System;
-using System.Threading.Tasks;
-using CritBitTree = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
+using StoreIndex = Fugu.Common.AaTree<Fugu.IndexEntry>;
 
 namespace Fugu
 {
     public sealed class Snapshot : IDisposable
     {
-        private readonly CritBitTree _index;
+        private readonly StoreIndex _index;
         private readonly Action<Snapshot> _onDisposed;
         private bool _disposed = false;
 
-        public Snapshot(StateVector clock, CritBitTree index, Action<Snapshot> onDisposed)
+        public Snapshot(StateVector clock, StoreIndex index, Action<Snapshot> onDisposed)
         {
             Guard.NotNull(index, nameof(index));
             Guard.NotNull(onDisposed, nameof(onDisposed));

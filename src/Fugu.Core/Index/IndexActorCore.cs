@@ -3,7 +3,7 @@ using Fugu.Common;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
+using StoreIndex = Fugu.Common.AaTree<Fugu.IndexEntry>;
 
 namespace Fugu.Index
 {
@@ -18,7 +18,7 @@ namespace Fugu.Index
         private StateVector _clock = new StateVector();
 
         // Current state of the master index for this store instance
-        private CritBitIndex _index = CritBitIndex.Empty;
+        private StoreIndex.Builder _indexBuilder = new StoreIndex.Builder();
 
         public IndexActorCore(
             ITargetBlock<SnapshotsUpdateMessage> snapshotsUpdateBlock,
@@ -42,7 +42,7 @@ namespace Fugu.Index
             foreach (var update in indexUpdates)
             {
                 // Determine if the index currently holds an entry for this key
-                bool keyExists = _index.TryGetValue(update.Key, out var existingEntry);
+                bool keyExists = _indexBuilder.TryGetValue(update.Key, out var existingEntry);
 
                 // Reject the new key+value if one of the following holds:
                 // 1. The index already contains a newer entry for the given key;
@@ -57,7 +57,7 @@ namespace Fugu.Index
                 else
                 {
                     // Add new entry to index
-                    _index = _index.SetItem(update.Key, update.Value);
+                    _indexBuilder[update.Key] = update.Value;
                     _tracker.OnItemAdded(update.Key, update.Value);
 
                     // If there was a previous entry for that key, remove it
@@ -68,12 +68,14 @@ namespace Fugu.Index
                 }
             }
 
+            var index = _indexBuilder.ToImmutable();
+
             // Make new segment stats available to observers
             _tracker.Prune();
-            _segmentStatsChangedBlock.Post(new SegmentStatsChangedMessage(_clock, _tracker.Stats, _index));
+            _segmentStatsChangedBlock.Post(new SegmentStatsChangedMessage(_clock, _tracker.Stats, index));
 
             // Notify downstream actors of update
-            return _snapshotsUpdateBlock.SendAsync(new SnapshotsUpdateMessage(_clock, _index, replyChannel));
+            return _snapshotsUpdateBlock.SendAsync(new SnapshotsUpdateMessage(_clock, index, replyChannel));
         }
     }
 }

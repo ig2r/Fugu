@@ -8,7 +8,7 @@ namespace Fugu.Actors
         public SegmentStatsChangedMessage(
             StateVector clock,
             IReadOnlyList<KeyValuePair<Segment, SegmentStats>> stats,
-            CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> index)
+            AaTree<IndexEntry> index)
         {
             Guard.NotNull(index, nameof(index));
             Guard.NotNull(stats, nameof(stats));
@@ -20,6 +20,6 @@ namespace Fugu.Actors
 
         public StateVector Clock { get; }
         public IReadOnlyList<KeyValuePair<Segment, SegmentStats>> Stats { get; }
-        public CritBitTree<ByteArrayKeyTraits, byte[], IndexEntry> Index { get; }
+        public AaTree<IndexEntry> Index { get; }
     }
 }

@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using CritBitIndex = Fugu.Common.CritBitTree<Fugu.Common.ByteArrayKeyTraits, byte[], Fugu.IndexEntry>;
+using StoreIndex = Fugu.Common.AaTree<Fugu.IndexEntry>;
 
 namespace Fugu.Snapshots
 {
@@ -18,7 +18,7 @@ namespace Fugu.Snapshots
         private readonly HashSet<Snapshot> _activeSnapshots = new HashSet<Snapshot>();
 
         private StateVector _clock;
-        private CritBitIndex _index = CritBitIndex.Empty;
+        private StoreIndex _index = StoreIndex.Empty;
 
         private StateVector _oldestVisibleState = default(StateVector);
 
@@ -28,7 +28,7 @@ namespace Fugu.Snapshots
             _oldestVisibleStateChangedBlock = oldestVisibleStateChangedBlock;
         }
 
-        public Task UpdateIndexAsync(StateVector clock, CritBitIndex index, TaskCompletionSource<VoidTaskResult> replyChannel)
+        public Task UpdateIndexAsync(StateVector clock, StoreIndex index, TaskCompletionSource<VoidTaskResult> replyChannel)
         {
             // replyChannel may be null
             Guard.NotNull(index, nameof(index));
