@@ -1,5 +1,4 @@
 ﻿using Fugu.Common;
-using Fugu.Format;
 using System;
 using System.IO;
 using System.IO.MemoryMappedFiles;
@@ -47,26 +46,19 @@ namespace Fugu.TableSets
         public string Path { get; }
         public long Capacity { get; }
 
-        public unsafe TableWriter GetWriter()
+        public Span<byte> GetSpan(long offset)
         {
-            var span = new UnmanagedByteSpan(_memory, Capacity);
-            return new ByteSpanTableWriter<UnmanagedByteSpan>(span);
-        }
-
-        public unsafe TableReader GetReader(long position, long size)
-        {
-            if (position > Capacity)
+            if (offset < 0 || offset > Capacity)
             {
-                throw new ArgumentOutOfRangeException(nameof(position));
+                throw new ArgumentOutOfRangeException(nameof(offset));
             }
 
-            if (position + size > Capacity)
-            {
-                throw new ArgumentOutOfRangeException(nameof(size));
-            }
+            var length = (int)Math.Min(Capacity - offset, int.MaxValue);
 
-            var span = new UnmanagedByteSpan(_memory + position, size);
-            return new ByteSpanTableReader<UnmanagedByteSpan>(span);
+            unsafe
+            {
+                return new Span<byte>(_memory + offset, length);
+            }
         }
 
         public void Dispose()

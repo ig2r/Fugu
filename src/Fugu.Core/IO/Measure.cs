@@ -1,8 +1,9 @@
 ﻿using Fugu.Common;
+using Fugu.IO.Records;
 using System;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
-namespace Fugu.Format
+namespace Fugu.IO
 {
     /// <summary>
     /// Provides functionality to determine space requirements for payload items (puts or deletes). This is
@@ -18,9 +19,9 @@ namespace Fugu.Format
             switch (indexEntry)
             {
                 case IndexEntry.Value value:
-                    return Marshal.SizeOf<PutRecord>() + key.Length + value.ValueLength;
+                    return Unsafe.SizeOf<PutRecord>() + key.Length + value.ValueLength;
                 case IndexEntry.Tombstone _:
-                    return Marshal.SizeOf<TombstoneRecord>() + key.Length;
+                    return Unsafe.SizeOf<TombstoneRecord>() + key.Length;
                 default:
                     throw new NotSupportedException();
             }
@@ -34,9 +35,9 @@ namespace Fugu.Format
             switch (writeBatchItem)
             {
                 case WriteBatchItem.Put put:
-                    return Marshal.SizeOf<PutRecord>() + key.Length + put.Value.Length;
+                    return Unsafe.SizeOf<PutRecord>() + key.Length + put.Value.Length;
                 case WriteBatchItem.Delete _:
-                    return Marshal.SizeOf<TombstoneRecord>() + key.Length;
+                    return Unsafe.SizeOf<TombstoneRecord>() + key.Length;
                 default:
                     throw new NotSupportedException();
             }

@@ -15,7 +15,7 @@ using System.Threading.Tasks.Dataflow;
 namespace Fugu
 {
     /// <summary>
-    /// A key-value store for <c>byte[]</c> payloads.
+    /// A key-value store for <c>byte[]</c> keys and data.
     /// </summary>
     public sealed class KeyValueStore : IDisposable
     {
@@ -55,6 +55,11 @@ namespace Fugu
             _balancingLinks = balancingLinks;
         }
 
+        /// <summary>
+        /// Creates a new instance of the <see cref="KeyValueStore"/> class backed by the given table set.
+        /// </summary>
+        /// <param name="tableSet">Backing table set underlying the store instance.</param>
+        /// <returns>An asynchronoous operation that returns a fully initialized store instance upon completion.</returns>
         public static async Task<KeyValueStore> CreateAsync(ITableSet tableSet)
         {
             Guard.NotNull(tableSet, nameof(tableSet));
@@ -121,6 +126,10 @@ namespace Fugu
             return store;
         }
 
+        /// <summary>
+        /// Acquires an immutable, point-in-time snapshot of the store's contents.
+        /// </summary>
+        /// <returns>The resulting snapshot of the store, represented as an asynchronous operation.</returns>
         public Task<Snapshot> GetSnapshotAsync()
         {
             var replyChannel = new TaskCompletionSource<Snapshot>();
@@ -130,6 +139,11 @@ namespace Fugu
             return replyChannel.Task;
         }
 
+        /// <summary>
+        /// Accepts a set of related changes and commits it atomically to the store.
+        /// </summary>
+        /// <param name="writeBatch">A group of puts/deletions to commit as a group.</param>
+        /// <returns>Asynchronous operation tracking successful completion of the commit.</returns>
         public Task CommitAsync(WriteBatch writeBatch)
         {
             Guard.NotNull(writeBatch, nameof(writeBatch));
@@ -141,6 +155,10 @@ namespace Fugu
             return replyChannel.Task;
         }
 
+        /// <summary>
+        /// Closes down the store instance to a consistent, stable state.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
         public async Task CloseAsync()
         {
             // Cut links from state-managing actors to balancing actors so that they no longer receive updates about

@@ -5,7 +5,7 @@ using System.Diagnostics;
 namespace Fugu
 {
     [DebuggerDisplay("MinGeneration = {MinGeneration}, MaxGeneration = {MaxGeneration}")]
-    public class Segment
+    public sealed class Segment
     {
         public Segment(long minGeneration, long maxGeneration, ITable table)
         {

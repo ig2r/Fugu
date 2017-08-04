@@ -1,11 +1,11 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
 using Fugu.Eviction;
-using Fugu.Format;
-using System;
+using Fugu.IO;
+using Fugu.IO.Records;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -85,81 +85,36 @@ namespace Fugu.Compaction
                 var minGeneration = compactableSegments[range.Offset].Key.MinGeneration;
                 var maxGeneration = compactableSegments[range.Offset + range.Count - 1].Key.MaxGeneration;
 
-                var query = from kvp in index
-                            let segment = kvp.Value.Segment
-                            where minGeneration <= segment.MinGeneration && segment.MaxGeneration <= maxGeneration
-                            select kvp;
+                var sourceIndexEntries = (from kvp in index
+                                          let segment = kvp.Value.Segment
+                                          where minGeneration <= segment.MinGeneration && segment.MaxGeneration <= maxGeneration
+                                          select kvp).ToArray();
 
                 // Determine space required for the compacted table
                 var requiredCapacity =
-                    Marshal.SizeOf<TableHeaderRecord>() +
-                    Marshal.SizeOf<CommitHeaderRecord>() +
-                    query.Select(kvp => Measure.GetSize(kvp.Key, kvp.Value)).Sum() +
-                    Marshal.SizeOf<CommitFooterRecord>() +
-                    Marshal.SizeOf<TableFooterRecord>();
+                    Unsafe.SizeOf<TableHeaderRecord>() +
+                    Unsafe.SizeOf<CommitHeaderRecord>() +
+                    sourceIndexEntries.Select(kvp => Measure.GetSize(kvp.Key, kvp.Value)).Sum() +
+                    Unsafe.SizeOf<CommitFooterRecord>() +
+                    Unsafe.SizeOf<TableFooterRecord>();
 
                 // Allocate output segment and track it as active
                 var outputTable = await _tableFactory.CreateTableAsync(requiredCapacity).ConfigureAwait(false);
                 var outputSegment = new Segment(minGeneration, maxGeneration, outputTable);
                 _activeSegments.Add(outputSegment);
 
-                using (var tableWriter = outputTable.GetWriter())
-                {
-                    tableWriter.WriteTableHeader(minGeneration, maxGeneration);
-                    tableWriter.WriteCommitHeader(query.Count());
+                // Perform compaction
+                var tableWriter = new TableWriter(outputTable);
+                tableWriter.WriteTableHeader(minGeneration, maxGeneration);
+                var commitBuilder = new CompactionCommitBuilder();
+                var indexUpdates = commitBuilder.Build(sourceIndexEntries, outputSegment, tableWriter);
+                tableWriter.WriteTableFooter();
 
-                    // First pass: write put/tombstone keys
-                    foreach (var (key, indexEntry) in query)
-                    {
-                        switch (indexEntry)
-                        {
-                            case IndexEntry.Value value:
-                                tableWriter.WritePut(key, value.ValueLength);
-                                break;
-                            case IndexEntry.Tombstone tombstone:
-                                tableWriter.WriteTombstone(key);
-                                break;
-                            default:
-                                throw new NotSupportedException();
-                        }
-                    }
-
-                    // Second pass: write payload and assemble index updates
-                    var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>();
-
-                    foreach (var (key, indexEntry) in query)
-                    {
-                        switch (indexEntry)
-                        {
-                            case IndexEntry.Value src:
-                                var valueEntry = new IndexEntry.Value(outputSegment, tableWriter.Position, src.ValueLength);
-                                indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
-
-                                // Copy data
-                                using (var tableReader = src.Segment.Table.GetReader(src.Offset, src.ValueLength))
-                                {
-                                    var buffer = tableReader.ReadBytes(src.ValueLength);
-                                    tableWriter.Write(buffer, 0, buffer.Length);
-                                }
-
-                                break;
-                            case IndexEntry.Tombstone _:
-                                var tombstoneEntry = new IndexEntry.Tombstone(outputSegment);
-                                indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, tombstoneEntry));
-                                break;
-                        }
-                    }
-
-                    // Finish output segment
-                    tableWriter.WriteCommitFooter(0);
-                    tableWriter.WriteTableFooter();
-
-                    // Notify environment
-                    await Task.WhenAll(
-                        _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity)),
-                        _updateIndexBlock.SendAsync(new UpdateIndexMessage(_compactionThreshold, indexUpdates, null)))
-                        .ConfigureAwait(false);
-                }
+                // Notify environment
+                await Task.WhenAll(
+                    _totalCapacityChangedBlock.SendAsync(new TotalCapacityChangedMessage(outputTable.Capacity)),
+                    _updateIndexBlock.SendAsync(new UpdateIndexMessage(_compactionThreshold, indexUpdates, null)))
+                    .ConfigureAwait(false);
             }
         }
 

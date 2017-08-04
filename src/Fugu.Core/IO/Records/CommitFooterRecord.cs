@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace Fugu.Format
+namespace Fugu.IO.Records
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct CommitFooterRecord

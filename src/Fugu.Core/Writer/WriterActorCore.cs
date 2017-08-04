@@ -1,9 +1,7 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
-using Fugu.Format;
-using System.Collections.Generic;
+using Fugu.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -14,7 +12,7 @@ namespace Fugu.Writer
         private readonly ITargetBlock<UpdateIndexMessage> _indexUpdateBlock;
         private readonly ITargetBlock<Segment> _segmentCreatedBlock;
 
-        private readonly IncrementalHash _md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        private readonly WriteBatchItemCommitBuilder _commitBuilder = new WriteBatchItemCommitBuilder();
 
         private StateVector _clock = new StateVector();
         private Segment _outputSegment;
@@ -46,7 +44,6 @@ namespace Fugu.Writer
                 if (_tableWriter != null)
                 {
                     _tableWriter.WriteTableFooter();
-                    _tableWriter.Dispose();
                 }
 
                 // Create new segment and notify observers
@@ -54,59 +51,13 @@ namespace Fugu.Writer
                 _segmentCreatedBlock.Post(_outputSegment);
 
                 // Prepare output
-                _tableWriter = outputTable.GetWriter();
+                _tableWriter = new TableWriter(outputTable);
                 _tableWriter.WriteTableHeader(_outputSegment.MinGeneration, _outputSegment.MaxGeneration);
             }
 
-            // Now get ready to write this batch
+            // Prepare and write this batch
             _clock = StateVector.Max(_clock, clock).NextCommit();
-            var changes = writeBatch.Changes.ToArray();
-
-            // Commit header
-            _tableWriter.WriteCommitHeader(changes.Length);
-
-            // First pass: write put/tombstone keys
-            foreach (var (key, writeBatchItem) in changes)
-            {
-                if (writeBatchItem is WriteBatchItem.Put put)
-                {
-                    _tableWriter.WritePut(key, put.Value.Length);
-                }
-                else
-                {
-                    _tableWriter.WriteTombstone(key);
-                }
-
-                // Include in hash for error checking
-                _md5.AppendData(key);
-            }
-
-            // Second pass: write payload and assemble index updates
-            var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>(changes.Length);
-
-            foreach (var (key, writeBatchItem) in changes)
-            {
-                if (writeBatchItem is WriteBatchItem.Put put)
-                {
-                    var valueEntry = new IndexEntry.Value(_outputSegment, _tableWriter.Position, put.Value.Length);
-                    indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, valueEntry));
-
-                    // Write value
-                    _tableWriter.Write(put.Value, 0, put.Value.Length);
-                    _md5.AppendData(put.Value);
-                }
-                else
-                {
-                    var tombstoneEntry = new IndexEntry.Tombstone(_outputSegment);
-                    indexUpdates.Add(new KeyValuePair<byte[], IndexEntry>(key, tombstoneEntry));
-                }
-            }
-
-            // Commit footer
-            var hash = _md5.GetHashAndReset();
-            uint checksum = hash[0] | (uint)(hash[1] << 8) | (uint)(hash[2] << 16) | (uint)(hash[3] << 24);
-
-            _tableWriter.WriteCommitFooter(checksum);
+            var indexUpdates = _commitBuilder.Build(writeBatch.Changes.ToArray(), _outputSegment, _tableWriter);
 
             // Hand off to index actor
             return _indexUpdateBlock.SendAsync(new UpdateIndexMessage(_clock, indexUpdates, replyChannel));

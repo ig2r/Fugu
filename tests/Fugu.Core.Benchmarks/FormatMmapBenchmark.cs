@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using Fugu.Common;
 using System;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
@@ -8,9 +7,7 @@ using System.Runtime.InteropServices;
 namespace Fugu.Core.Benchmarks
 {
     /// <summary>
-    /// Compares two approaches to writing structured data to a memory-mapped file:
-    /// 1. using view streams;
-    /// 2. using unsafe memory access, encapsulated by a span struct.
+    /// Compares approaches to writing structured data to a memory-mapped file.
     /// </summary>
     public class FormatMmapBenchmark
     {
@@ -26,7 +23,7 @@ namespace Fugu.Core.Benchmarks
         [GlobalSetup]
         public void GlobalSetup()
         {
-            long capacity = OPERATIONS * (DATALENGTH + Marshal.SizeOf<ItemHeader>());
+            long capacity = OPERATIONS * (DATALENGTH + Unsafe.SizeOf<ItemHeader>());
             _mmap = MemoryMappedFile.CreateNew(null, capacity);
             _viewStream = _mmap.CreateViewStream();
         }
@@ -54,22 +51,28 @@ namespace Fugu.Core.Benchmarks
         }
 
         [Benchmark(OperationsPerInvoke = OPERATIONS)]
-        public void UsingUnmanagedByteSpan()
+        public void UsingSystemSpan()
         {
-            UnmanagedByteSpan span;
+            Span<byte> span;
             unsafe
             {
                 byte* ptr = null;
                 _viewStream.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
-                span = new UnmanagedByteSpan(ptr, _viewStream.Length);
+
+                checked
+                {
+                    span = new Span<byte>(ptr, (int)_viewStream.Length);
+                }
             }
 
             for (int i = 0; i < OPERATIONS; i++)
             {
-                var itemHeader = new ItemHeader { Tag = 1, KeyLength = 2, ValueLength = 3, Checksum = 0xBEEF };
+                var itemSpan = span.NonPortableCast<byte, ItemHeader>();
+                itemSpan[0] = new ItemHeader { Tag = 1, KeyLength = 2, ValueLength = 3, Checksum = 0xBEEF };
+                span = span.Slice(Unsafe.SizeOf<ItemHeader>());
 
-                span = span.Write(ref itemHeader);
-                span = span.Write(_data, 0, _data.Length);
+                _data.CopyTo(span);
+                span = span.Slice(_data.Length);
             }
 
             _viewStream.SafeMemoryMappedViewHandle.ReleasePointer();
@@ -77,7 +80,7 @@ namespace Fugu.Core.Benchmarks
 
         private ArraySegment<byte> StructToArray<T>(T structure, byte[] buffer) where T : struct
         {
-            var size = Marshal.SizeOf<ItemHeader>();
+            var size = Unsafe.SizeOf<ItemHeader>();
             var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
             Marshal.StructureToPtr(structure, handle.AddrOfPinnedObject(), false);
             handle.Free();

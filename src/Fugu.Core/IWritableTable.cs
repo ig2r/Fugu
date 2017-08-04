@@ -1,10 +1,6 @@
-﻿using Fugu.Format;
-using System.IO;
-
-namespace Fugu
+﻿namespace Fugu
 {
     public interface IWritableTable : ITable
     {
-        TableWriter GetWriter();
     }
 }

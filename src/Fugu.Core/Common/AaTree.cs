@@ -322,30 +322,5 @@ namespace Fugu.Common
         }
 
         #endregion
-
-        #region ByteArrayComparer
-
-        private class ByteArrayComparer : IComparer<byte[]>
-        {
-            public int Compare(byte[] x, byte[] y)
-            {
-                if (ReferenceEquals(x, y))
-                {
-                    return 0;
-                }
-
-                for (int i = 0; i < x.Length && i < y.Length; i++)
-                {
-                    if (x[i] != y[i])
-                    {
-                        return x[i].CompareTo(y[i]);
-                    }
-                }
-
-                return x.Length.CompareTo(y.Length);
-            }
-        }
-
-        #endregion
     }
 }

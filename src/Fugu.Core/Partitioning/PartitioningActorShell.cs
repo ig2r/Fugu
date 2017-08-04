@@ -2,7 +2,6 @@
 using Fugu.Common;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using System;
 
 namespace Fugu.Partitioning
 {

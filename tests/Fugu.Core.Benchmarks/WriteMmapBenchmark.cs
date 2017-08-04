@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using Fugu.Common;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 
@@ -60,26 +59,6 @@ namespace Fugu.Core.Benchmarks
                 {
                     *(ptr + i) = 0xFF;
                 }
-            }
-
-            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
-        }
-
-        [Benchmark]
-        public void UnmanagedByteSpan()
-        {
-            UnmanagedByteSpan span;
-
-            unsafe
-            {
-                byte* ptr = null;
-                _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
-                span = new UnmanagedByteSpan(ptr, CAPACITY);
-            }
-
-            for (int i = 0; i < CAPACITY; i++)
-            {
-                span[i] = 0xFF;
             }
 
             _accessor.SafeMemoryMappedViewHandle.ReleasePointer();

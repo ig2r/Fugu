@@ -1,9 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Fugu.Common
 {
+    /// <summary>
+    /// Executes a given delegate when disposed.
+    /// </summary>
     public class Disposable : IDisposable
     {
         private bool _disposed;

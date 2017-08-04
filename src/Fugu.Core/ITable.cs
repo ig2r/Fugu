@@ -1,10 +1,10 @@
-﻿using Fugu.Format;
+﻿using System;
 
 namespace Fugu
 {
     public interface ITable
     {
         long Capacity { get; }
-        TableReader GetReader(long position, long size);
+        Span<byte> GetSpan(long offset);
     }
 }

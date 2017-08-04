@@ -50,8 +50,8 @@ namespace Fugu.Core.Tests
                 // Assert
                 using (var snapshot = await store.GetSnapshotAsync())
                 {
-                    var retrieved = snapshot.TryGetValue(kvp1.Key);
-                    Assert.Equal<byte>(kvp1.Value, retrieved);
+                    var retrieved = snapshot[kvp1.Key];
+                    Assert.Equal<byte>(kvp1.Value, retrieved.ToArray());
                 }
             }
         }
@@ -83,8 +83,8 @@ namespace Fugu.Core.Tests
             using (var store = await KeyValueStore.CreateAsync(tableSet))
             using (var snapshot = await store.GetSnapshotAsync())
             {
-                Assert.Equal(kvp1.Value, snapshot.TryGetValue(kvp1.Key));
-                Assert.Equal(kvp2.Value, snapshot.TryGetValue(kvp2.Key));
+                Assert.Equal(kvp1.Value, snapshot[kvp1.Key].ToArray());
+                Assert.Equal(kvp2.Value, snapshot[kvp2.Key].ToArray());
             }
         }
 

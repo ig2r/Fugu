@@ -1,4 +1,4 @@
-﻿namespace Fugu.Format
+﻿namespace Fugu.IO.Records
 {
     /// <summary>
     /// Used to distinguish between <see cref="CommitHeader"/> and <see cref="TableFooter"/> records.

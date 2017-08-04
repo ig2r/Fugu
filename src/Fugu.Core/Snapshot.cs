@@ -1,15 +1,25 @@
 ﻿using Fugu.Common;
 using System;
+using System.Collections.Generic;
 using StoreIndex = Fugu.Common.AaTree<Fugu.IndexEntry>;
 
 namespace Fugu
 {
+    /// <summary>
+    /// An immutable snapshot of the contents of a <see cref="KeyValueStore"/> instance.
+    /// </summary>
     public sealed class Snapshot : IDisposable
     {
         private readonly StoreIndex _index;
         private readonly Action<Snapshot> _onDisposed;
         private bool _disposed = false;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Snapshot"/> class.
+        /// </summary>
+        /// <param name="clock">Clock vector representing the snapshotted state of the store.</param>
+        /// <param name="index">Index to the store contents.</param>
+        /// <param name="onDisposed">Callback to invoke when this snapshot is disposed of.</param>
         public Snapshot(StateVector clock, StoreIndex index, Action<Snapshot> onDisposed)
         {
             Guard.NotNull(index, nameof(index));
@@ -20,34 +30,57 @@ namespace Fugu
             _onDisposed = onDisposed;
         }
 
+        /// <summary>
+        /// Gets the state vector associated with this snapshot.
+        /// </summary>
         public StateVector Clock { get; }
 
-        public byte[] TryGetValue(byte[] key)
+        /// <summary>
+        /// Gets the value corresponding to a given key, or throws a <see cref="KeyNotFoundException"/> if the given key
+        /// is not contained in the snapshot.
+        /// </summary>
+        /// <param name="key">The key for which to retrieve the value.</param>
+        /// <returns>The value associated with the given key.</returns>
+        public ReadOnlySpan<byte> this[byte[] key]
+        {
+            get
+            {
+                if (!TryGetValue(key, out var span))
+                {
+                    throw new KeyNotFoundException();
+                }
+
+                return span;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to retrieve the value corresponding to a given key if it is contained in the snapshot.
+        /// </summary>
+        /// <param name="key">The key for which to retrieve the value.</param>
+        /// <param name="value">Output parameter that will hold the retrieved key if successful.</param>
+        /// <returns>A value indicating whether the given key was present in the snapshot.</returns>
+        public bool TryGetValue(byte[] key, out ReadOnlySpan<byte> value)
         {
             Guard.NotNull(key, nameof(key));
             ThrowIfDisposed();
 
-            if (!_index.TryGetValue(key, out var indexEntry))
+            if (!_index.TryGetValue(key, out var indexEntry) || !(indexEntry is IndexEntry.Value valueIndexEntry))
             {
-                // Index contains no entry for that key
-                return null;
+                // Index contains no entry for that key, or it's a tombstone
+                value = default(Span<byte>);
+                return false;
             }
 
-            IndexEntry.Value valueIndexEntry = indexEntry as IndexEntry.Value;
-            if (valueIndexEntry == null)
-            {
-                // Index contains an entry for that key, but it's a tombstone
-                return null;
-            }
-
-            using (var reader = valueIndexEntry.Segment.Table.GetReader(valueIndexEntry.Offset, valueIndexEntry.ValueLength))
-            {
-                return reader.ReadBytes(valueIndexEntry.ValueLength);
-            }
+            value = valueIndexEntry.Segment.Table.GetSpan(valueIndexEntry.Offset).Slice(0, valueIndexEntry.ValueLength);
+            return true;
         }
 
         #region IDisposable
 
+        /// <summary>
+        /// Releases the current snapshot and allows associated resources to be cleaned up.
+        /// </summary>
         public void Dispose()
         {
             if (!_disposed)

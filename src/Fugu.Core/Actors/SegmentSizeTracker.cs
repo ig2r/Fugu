@@ -1,4 +1,4 @@
-﻿using Fugu.Format;
+﻿using Fugu.IO;
 using System.Collections.Generic;
 using System.Linq;
 

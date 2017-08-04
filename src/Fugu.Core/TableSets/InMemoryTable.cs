@@ -1,7 +1,4 @@
 ﻿using System;
-using System.IO;
-using Fugu.Common;
-using Fugu.Format;
 
 namespace Fugu.TableSets
 {
@@ -27,26 +24,18 @@ namespace Fugu.TableSets
 
         public long Capacity { get; }
 
-        public TableWriter GetWriter()
+        public Span<byte> GetSpan(long offset)
         {
-            var span = new ManagedByteSpan(_buffer);
-            return new ByteSpanTableWriter<ManagedByteSpan>(span);
-        }
-
-        public TableReader GetReader(long position, long size)
-        {
-            if (position > Capacity)
+            if (offset < 0 || offset > Capacity)
             {
-                throw new ArgumentOutOfRangeException(nameof(position));
+                throw new ArgumentOutOfRangeException(nameof(offset));
             }
 
-            if (position + size > Capacity)
+            checked
             {
-                throw new ArgumentOutOfRangeException(nameof(size));
+                int length = (int)(Capacity - offset);
+                return new Span<byte>(_buffer, (int)offset, length);
             }
-
-            var span = new ManagedByteSpan(_buffer, (int)position, (int)size);
-            return new ByteSpanTableReader<ManagedByteSpan>(span);
         }
     }
 }

@@ -1,9 +1,10 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
-using Fugu.Format;
+using Fugu.IO;
+using Fugu.IO.Records;
 using System;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -46,8 +47,8 @@ namespace Fugu.Partitioning
             _tableFactory = tableFactory;
             _writeBlock = writeBlock;
 
-            _tableHeaderSize = Marshal.SizeOf<TableHeaderRecord>();
-            _tableFooterSize = Marshal.SizeOf<TableFooterRecord>();
+            _tableHeaderSize = Unsafe.SizeOf<TableHeaderRecord>();
+            _tableFooterSize = Unsafe.SizeOf<TableFooterRecord>();
         }
 
         public async Task CommitAsync(WriteBatch writeBatch, TaskCompletionSource<VoidTaskResult> replyChannel)
@@ -94,9 +95,9 @@ namespace Fugu.Partitioning
         private long GetRequiredSpaceForWriteBatch(WriteBatch writeBatch)
         {
             return
-                Marshal.SizeOf<CommitHeaderRecord>() +
+                Unsafe.SizeOf<CommitHeaderRecord>() +
                 writeBatch.Changes.Sum(kvp => Measure.GetSize(kvp.Key, kvp.Value)) +
-                Marshal.SizeOf<CommitFooterRecord>();
+                Unsafe.SizeOf<CommitFooterRecord>();
         }
     }
 }

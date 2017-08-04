@@ -1,5 +1,6 @@
 ﻿using Fugu.Common;
-using Fugu.Format;
+using Fugu.IO;
+using Fugu.IO.Records;
 using System;
 using System.Collections.Generic;
 
@@ -116,7 +117,7 @@ namespace Fugu.Bootstrapping
             }
 
             _remainingElementsInCommitHeader--;
-            var key = _reader.ReadBytes(keyLength);
+            var key = _reader.ReadBytes(keyLength).ToArray();
             return key;
         }
 
@@ -124,7 +125,7 @@ namespace Fugu.Bootstrapping
         {
             MarkCurrentTokenConsumed();
             var putRecord = _queuedPuts.Dequeue();
-            return _reader.ReadBytes(putRecord.ValueLength);
+            return _reader.ReadBytes(putRecord.ValueLength).ToArray();
         }
 
         private void MarkCurrentTokenConsumed()

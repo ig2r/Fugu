@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Fugu.Common
 {
     /// <summary>
-    /// Enables checking byte arrays for equality based on their contents.
+    /// Tests byte arrays for equality based on their contents.
     /// </summary>
     public sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
     {
