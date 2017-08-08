@@ -1,4 +1,5 @@
 ﻿using Fugu.Common;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -10,7 +11,7 @@ namespace Fugu.Bootstrapping
     /// </summary>
     public class SegmentLoadStrategy
     {
-        private readonly Queue<Segment> _queue;
+        private readonly Segment[] _segments;
 
         public SegmentLoadStrategy(IEnumerable<Segment> segments)
         {
@@ -19,38 +20,34 @@ namespace Fugu.Bootstrapping
             // Process segments in order, giving preference to segments that span larger generation
             // ranges since they are most likely more recent (e.g., created during compactions) than
             // segments that span smaller ranges
-            _queue = new Queue<Segment>(
-                from s in segments
-                orderby
-                    s.MinGeneration ascending,
-                    s.MaxGeneration descending
-                select s);
+            _segments = (from s in segments
+                         orderby
+                             s.MinGeneration ascending,
+                             s.MaxGeneration descending
+                         select s).ToArray();
         }
 
         public bool GetNext(long maxGenerationLoaded, out Segment nextSegment, out bool requireValidFooter)
         {
-            while (_queue.Count > 0)
+            // Find the first segment that starts at a generation greater than what we have loaded so far
+            nextSegment = _segments.FirstOrDefault(s => s.MinGeneration > maxGenerationLoaded);
+
+            if (nextSegment == null)
             {
-                nextSegment = _queue.Dequeue();
-
-                // Skip this segment if it contains data from a generation range we've already loaded
-                if (nextSegment.MaxGeneration <= maxGenerationLoaded)
-                {
-                    continue;
-                }
-
-                // If the following segment covers the same min generation range as the current segment,
-                // we can be picky and only accept data from the current segment if it contains a valid
-                // footer; if it doesn't, we'll just fall back to the next segment in line
-                requireValidFooter =
-                    _queue.Count > 0 &&
-                    nextSegment.MinGeneration == _queue.Peek().MinGeneration;
-                return true;
+                requireValidFooter = false;
+                return false;
             }
 
-            nextSegment = null;
-            requireValidFooter = false;
-            return false;
+            // If the segment following our chosen segment covers the same min genration range, we know that the
+            // chosen segment was created through a compaction from the following segments, so we will be picky and
+            // only accept it if it can be loaded entirely, with footer intact; otherwise, we'll skip it and restore
+            // data from the smaller segments that follow it
+            var index = Array.IndexOf(_segments, nextSegment);
+            requireValidFooter =
+                index + 1 < _segments.Length &&
+                nextSegment.MinGeneration == _segments[index + 1].MinGeneration;
+
+            return true;
         }
     }
 }

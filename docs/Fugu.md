@@ -71,6 +71,7 @@
 
     TableFooter ::=
         Tag                     : uint8
+        Checksum                : uint64 - verifies integrity of table contents
 
 ### Notes
 

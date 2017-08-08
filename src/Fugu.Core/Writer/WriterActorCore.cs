@@ -43,7 +43,9 @@ namespace Fugu.Writer
             {
                 if (_tableWriter != null)
                 {
-                    _tableWriter.WriteTableFooter();
+                    // TODO: We should flush content to disk before writing the table footer
+                    var checksum = (ulong)_outputSegment.MinGeneration ^ (ulong)_outputSegment.MaxGeneration;
+                    _tableWriter.WriteTableFooter(checksum);
                 }
 
                 // Create new segment and notify observers

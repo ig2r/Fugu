@@ -108,7 +108,7 @@ namespace Fugu.Compaction
                 tableWriter.WriteTableHeader(minGeneration, maxGeneration);
                 var commitBuilder = new CompactionCommitBuilder();
                 var indexUpdates = commitBuilder.Build(sourceIndexEntries, outputSegment, tableWriter);
-                tableWriter.WriteTableFooter();
+                tableWriter.WriteTableFooter((ulong)minGeneration ^ (ulong)maxGeneration);
 
                 // Notify environment
                 await Task.WhenAll(

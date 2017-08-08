@@ -107,7 +107,7 @@ namespace Fugu.IO
             Offset += structSize;
         }
 
-        public void WriteTableFooter()
+        public void WriteTableFooter(ulong checksum)
         {
             var span = GetSpan();
             var structSize = Unsafe.SizeOf<TableFooterRecord>();
@@ -116,6 +116,7 @@ namespace Fugu.IO
             records[0] = new TableFooterRecord
             {
                 Tag = TableRecordType.TableFooter,
+                Checksum = checksum,
             };
 
             Offset += structSize;

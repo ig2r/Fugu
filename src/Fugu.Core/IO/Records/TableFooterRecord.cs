@@ -6,5 +6,6 @@ namespace Fugu.IO.Records
     public struct TableFooterRecord
     {
         public TableRecordType Tag { get; set; }
+        public ulong Checksum { get; set; }
     }
 }

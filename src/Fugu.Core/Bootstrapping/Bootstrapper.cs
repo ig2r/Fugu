@@ -1,9 +1,9 @@
 ﻿using Fugu.Actors;
 using Fugu.Common;
 using Fugu.IO;
+using Fugu.IO.Records;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -28,7 +28,7 @@ namespace Fugu.Bootstrapping
 
             // Enumerate available segments
             var tables = await tableSet.GetTablesAsync();
-            var availableSegments = await GetAvailableSegmentsAsync(tables);
+            var availableSegments = GetAvailableSegments(tables);
 
             // Scan segments to populate index
             var loadStrategy = new SegmentLoadStrategy(availableSegments);
@@ -55,38 +55,26 @@ namespace Fugu.Bootstrapping
             return new BootstrapperResult(maxGeneration, totalCapacity);
         }
 
-        private async Task<IEnumerable<Segment>> GetAvailableSegmentsAsync(IEnumerable<ITable> tables)
-        {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-            var tasks = new HashSet<Task<Segment>>(tables.Select(ReadTableHeaderAsync));
+        private IEnumerable<Segment> GetAvailableSegments(IEnumerable<ITable> tables)
+        {
             var segments = new List<Segment>();
 
-            while (tasks.Count > 0)
+            foreach (var table in tables)
             {
-                var task = await Task.WhenAny(tasks);
-                tasks.Remove(task);
-
-                if (task.IsCompleted)
+                try
                 {
-                    segments.Add(task.Result);
+                    var reader = new TableReader(table);
+                    var header = reader.ReadTableHeader();
+                    var segment = new Segment(header.MinGeneration, header.MaxGeneration, table);
+                    segments.Add(segment);
+                }
+                catch
+                {
+                    // We'll delete this table later
                 }
             }
 
             return segments;
-        }
-
-        private Task<Segment> ReadTableHeaderAsync(ITable table)
-        {
-            try
-            {
-                var reader = new TableReader(table);
-                var header = reader.ReadTableHeader();
-                var segment = new Segment(header.MinGeneration, header.MaxGeneration, table);
-                return Task.FromResult(segment);
-            }
-            catch (Exception ex)
-            {
-                return Task.FromException<Segment>(ex);
-            }
         }
 
         private async Task<bool> TryLoadSegmentAsync(
@@ -96,145 +84,107 @@ namespace Fugu.Bootstrapping
         {
             Guard.NotNull(segment, nameof(segment));
 
-            // First pass over segment to find out if the table holds a valid table footer
-            var hasValidFooter = TryFindTableFooter(segment);
-            if (!hasValidFooter && requireValidFooter)
+            // Read structure
+            var tableReader = new TableReader(segment.Table);
+            var header = tableReader.ReadTableHeader();
+
+            var commitReader = new CommitReader(segment, tableReader);
+            var commitInfos = new List<CommitInfo>();
+
+            while ((TableRecordType)tableReader.GetTag() == TableRecordType.CommitHeader)
+            {
+                var commitInfo = commitReader.ReadCommit();
+                commitInfos.Add(commitInfo);
+            }
+
+            var tableFooter = tableReader.ReadTableFooter();
+
+            var expectedChecksum = (ulong)header.MinGeneration ^ (ulong)header.MaxGeneration;
+            var validFooter = tableFooter.Tag == TableRecordType.TableFooter &&
+                tableFooter.Checksum == expectedChecksum;
+
+            if (requireValidFooter && !validFooter)
             {
                 return false;
             }
 
-            // Second pass over segment to load data into the index. If no valid footer was found during the first
-            // pass, we also need to verify integrity via checksums.
-            var reader = new TableReader(segment.Table);
-            var parser = new SegmentParser(reader);
+            // TODO: check if footer checksum matches header; in that case, we could skip verifying individual commits
 
-            try
+            // Verify commit checksums
+            var goodCommitCount = VerifyCommitChecksums(commitInfos);
+            if (goodCommitCount < commitInfos.Count && requireValidFooter)
             {
-                while (parser.Read())
-                {
-                    // Scan for commit headers, then parse commits into collection of index updates
-                    if (parser.Current == SegmentParserTokenType.CommitHeader)
-                    {
-                        var indexUpdates = ParseCommit(segment, reader, parser, verifyChecksum: !hasValidFooter);
-                        var replyChannel = new TaskCompletionSource<VoidTaskResult>();
-                        await Task.WhenAll(
-                            indexUpdateBlock.SendAsync(new UpdateIndexMessage(new StateVector(), indexUpdates, replyChannel)),
-                            replyChannel.Task);
-                    }
-                }
+                return false;
             }
-            catch { }
+
+            var goodCommitInfos = commitInfos.GetRange(0, goodCommitCount);
+            await AddCommitsToIndexAsync(goodCommitInfos, indexUpdateBlock);
+
             return true;
         }
 
-        private bool TryFindTableFooter(Segment segment)
+        private int VerifyCommitChecksums(IReadOnlyList<CommitInfo> commitInfos)
         {
-            var reader = new TableReader(segment.Table);
-            var parser = new SegmentParser(reader);
+            var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+            int goodCommitCount = 0;
 
-            try
+            foreach (var commitInfo in commitInfos)
             {
-                while (parser.Read())
+                // Include keys
+                foreach (var indexUpdate in commitInfo.IndexUpdates)
                 {
-                    switch (parser.Current)
+                    md5.AppendData(indexUpdate.Key);
+                }
+
+                // Include values
+                foreach (var indexUpdate in commitInfo.IndexUpdates)
+                {
+                    if (indexUpdate.Value is IndexEntry.Value put)
                     {
-                        case SegmentParserTokenType.TableFooter:
-                            // TODO: verify checksum
-                            parser.ReadTableFooter();
-                            return true;
+                        var value = put.Segment.Table.GetSpan(put.Offset).Slice(0, put.ValueLength);
+                        md5.AppendData(value.ToArray());
                     }
                 }
 
-                return false;
+                var hash = md5.GetHashAndReset();
+                uint checksum = hash[0] | (uint)(hash[1] << 8) | (uint)(hash[2] << 16) | (uint)(hash[3] << 24);
+
+                if (checksum != commitInfo.CommitChecksum)
+                {
+                    break;
+                }
+
+                goodCommitCount++;
             }
-            catch
-            {
-                return false;
-            }
+
+            return goodCommitCount;
         }
 
-        private IReadOnlyList<KeyValuePair<byte[], IndexEntry>> ParseCommit(
-            Segment segment,
-            TableReader reader,
-            SegmentParser parser,
-            bool verifyChecksum)
+        private Task AddCommitsToIndexAsync(IReadOnlyList<CommitInfo> commitInfos, ITargetBlock<UpdateIndexMessage> indexUpdateBlock)
         {
-            var indexUpdates = new List<KeyValuePair<byte[], IndexEntry>>();
-            var putKeys = new Queue<byte[]>();
+            var sendTasks = new List<Task>(commitInfos.Count + 1);
+            TaskCompletionSource<VoidTaskResult> replyChannel = null;
 
-            var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
-
-            while (parser.Read())
+            for (int i = 0; i < commitInfos.Count; i++)
             {
-                switch (parser.Current)
+                var commitInfo = commitInfos[i];
+
+                if (i == commitInfos.Count - 1)
                 {
-                    case SegmentParserTokenType.Put:
-                        {
-                            var key = parser.ReadPutOrTombstoneKey();
-                            putKeys.Enqueue(key);
+                    replyChannel = new TaskCompletionSource<VoidTaskResult>();
+                }
 
-                            if (verifyChecksum)
-                            {
-                                md5.AppendData(key);
-                            }
+                sendTasks.Add(indexUpdateBlock.SendAsync(
+                    new UpdateIndexMessage(
+                        new StateVector(), commitInfo.IndexUpdates, replyChannel)));
 
-                            break;
-                        }
-                    case SegmentParserTokenType.Tombstone:
-                        {
-                            var key = parser.ReadPutOrTombstoneKey();
-                            indexUpdates.Add(
-                                new KeyValuePair<byte[], IndexEntry>(
-                                    key,
-                                    new IndexEntry.Tombstone(segment)));
-
-                            if (verifyChecksum)
-                            {
-                                md5.AppendData(key);
-                            }
-
-                            break;
-                        }
-                    case SegmentParserTokenType.Value:
-                        {
-                            var key = putKeys.Dequeue();
-                            var offset = reader.Offset;
-                            var value = parser.ReadValue();
-                            indexUpdates.Add(
-                                new KeyValuePair<byte[], IndexEntry>(
-                                    key,
-                                    new IndexEntry.Value(segment, offset, value.Length)));
-
-                            if (verifyChecksum)
-                            {
-                                md5.AppendData(value);
-                            }
-
-                            break;
-                        }
-                    case SegmentParserTokenType.CommitFooter:
-                        {
-                            var commitFooter = parser.ReadCommitFooter();
-
-                            if (verifyChecksum)
-                            {
-                                var hash = md5.GetHashAndReset();
-                                uint checksum = hash[0] | (uint)(hash[1] << 8) | (uint)(hash[2] << 16) | (uint)(hash[3] << 24);
-
-                                if (checksum != commitFooter.CommitChecksum)
-                                {
-                                    throw new InvalidDataException("Mismatched checksum, this indicates possible data corruption.");
-                                }
-                            }
-
-                            return indexUpdates;
-                        }
-                    default:
-                        throw new InvalidOperationException("Unexpected token while parsing commit.");
+                if (replyChannel != null)
+                {
+                    sendTasks.Add(replyChannel.Task);
                 }
             }
 
-            throw new InvalidOperationException("Unexpected end of commit.");
+            return Task.WhenAll(sendTasks);
         }
     }
 }
