@@ -50,8 +50,8 @@ namespace Fugu.Core.Tests
                 // Assert
                 using (var snapshot = await store.GetSnapshotAsync())
                 {
-                    var retrieved = snapshot[kvp1.Key];
-                    Assert.Equal<byte>(kvp1.Value, retrieved.ToArray());
+                    var retrieved = snapshot[kvp1.Key].ToArray();
+                    Assert.Equal<byte>(kvp1.Value, retrieved);
                 }
             }
         }
