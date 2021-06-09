@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E6770700-6E8
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fugu.Core", "src\Fugu.Core\Fugu.Core.csproj", "{CD69058C-BAD3-4A91-ADE8-5D3CA388A1B2}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{CD754229-3BEF-43E2-9957-B4498F91548B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicSample", "samples\BasicSample\BasicSample.csproj", "{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,8 +36,21 @@ Global
 		{CD69058C-BAD3-4A91-ADE8-5D3CA388A1B2}.Release|x64.Build.0 = Release|Any CPU
 		{CD69058C-BAD3-4A91-ADE8-5D3CA388A1B2}.Release|x86.ActiveCfg = Release|Any CPU
 		{CD69058C-BAD3-4A91-ADE8-5D3CA388A1B2}.Release|x86.Build.0 = Release|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Debug|x64.Build.0 = Debug|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Debug|x86.Build.0 = Debug|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Release|x64.ActiveCfg = Release|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Release|x64.Build.0 = Release|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Release|x86.ActiveCfg = Release|Any CPU
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{CD69058C-BAD3-4A91-ADE8-5D3CA388A1B2} = {E6770700-6E89-4FC6-8A6F-C471634ED27E}
+		{71B90EF5-FB3F-428E-BE94-1D53A9266BD1} = {CD754229-3BEF-43E2-9957-B4498F91548B}
 	EndGlobalSection
 EndGlobal
