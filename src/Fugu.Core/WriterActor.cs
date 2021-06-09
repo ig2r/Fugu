@@ -22,9 +22,14 @@ namespace Fugu
 
             var writtenData = bufferWriter.WrittenSpan.ToArray();
 
-            while (true)
+            // Loop until input channel completes, signalling graceful termination
+            while (await _input.WaitToReadAsync())
             {
-                var batch = await _input.ReadAsync();
+                if (!_input.TryRead(out var batch))
+                {
+                    continue;
+                }
+
             }
         }
     }

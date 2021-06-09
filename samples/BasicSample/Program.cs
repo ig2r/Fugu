@@ -8,7 +8,7 @@ namespace BasicSample
     {
         static async Task Main()
         {
-            var store = new KeyValueStore();
+            await using var store = new KeyValueStore();
 
             var batch = new WriteBatch
             {
