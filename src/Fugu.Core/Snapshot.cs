@@ -6,7 +6,6 @@ namespace Fugu
     {
         public void Dispose()
         {
-            throw new NotImplementedException();
         }
     }
 }
