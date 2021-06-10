@@ -9,13 +9,17 @@ namespace Fugu
         private readonly Channel<WriteBatch> _inputChannel;
         private readonly WriterActor _writerActor;
 
-        // TODO: make ctor private, have CreateAsync static method instead
-        public KeyValueStore()
+        private KeyValueStore()
         {
             _inputChannel = Channel.CreateUnbounded<WriteBatch>();
             _writerActor = new WriterActor(_inputChannel.Reader);
+        }
 
-            _ = _writerActor.ExecuteAsync();
+        public static Task<KeyValueStore> CreateAsync()
+        {
+            var store = new KeyValueStore();
+            var done = Task.WhenAll(store._writerActor.ExecuteAsync());
+            return Task.FromResult(store);
         }
 
         public ValueTask<Snapshot> GetSnapshotAsync()

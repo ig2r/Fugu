@@ -8,12 +8,14 @@ namespace BasicSample
     {
         static async Task Main()
         {
-            await using var store = new KeyValueStore();
+            await using var store = await KeyValueStore.CreateAsync();
 
             var batch = new WriteBatch
             {
                 ["Hello"] = Encoding.UTF8.GetBytes("World")
             };
+
+            batch.Remove("Foo");
 
             await store.WriteAsync(batch);
 

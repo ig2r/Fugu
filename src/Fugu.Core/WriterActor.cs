@@ -4,6 +4,10 @@ using System.Threading.Tasks;
 
 namespace Fugu
 {
+    /// <summary>
+    /// Serializes a WriteBatch into the assigned segment and passes the resulting offsets
+    /// on for indexing.
+    /// </summary>
     public class WriterActor
     {
         private readonly ChannelReader<WriteBatch> _input;
