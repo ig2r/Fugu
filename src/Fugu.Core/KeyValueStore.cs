@@ -1,4 +1,5 @@
 ﻿using Fugu.Actors;
+using Fugu.Messages;
 using System;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -14,8 +15,8 @@ namespace Fugu
         private readonly SnapshotsActor _snapshotsActor;
         private readonly CompactionActor _compactionActor;
 
-        private readonly Channel<byte> _allocateWriteBatchChannel;
-        private readonly Channel<byte> _writeWriteBatchChannel;
+        private readonly Channel<AllocateWriteBatchMessage> _allocateWriteBatchChannel;
+        private readonly Channel<WriteAllocatedBatchMessage> _writeAllocatedBatchChannel;
         private readonly Channel<byte> _updateIndexChannel;
         private readonly Channel<byte> _indexUpdatedChannel;
         private readonly Channel<byte> _acquireSnapshotChannel;
@@ -28,8 +29,8 @@ namespace Fugu
 
         private KeyValueStore()
         {
-            _allocateWriteBatchChannel = Channel.CreateUnbounded<byte>();
-            _writeWriteBatchChannel = Channel.CreateUnbounded<byte>();
+            _allocateWriteBatchChannel = Channel.CreateUnbounded<AllocateWriteBatchMessage>();
+            _writeAllocatedBatchChannel = Channel.CreateUnbounded<WriteAllocatedBatchMessage>();
             _updateIndexChannel = Channel.CreateUnbounded<byte>();
             _indexUpdatedChannel = Channel.CreateUnbounded<byte>();
             _acquireSnapshotChannel = Channel.CreateUnbounded<byte>();
@@ -43,10 +44,10 @@ namespace Fugu
             _allocationActor = new AllocationActor(
                 _allocateWriteBatchChannel.Reader,
                 _segmentEvictedChannel.Reader,
-                _writeWriteBatchChannel.Writer);
+                _writeAllocatedBatchChannel.Writer);
 
             _writerActor = new WriterActor(
-                _writeWriteBatchChannel.Reader,
+                _writeAllocatedBatchChannel.Reader,
                 _updateIndexChannel.Writer);
 
             _indexActor = new IndexActor(
@@ -85,10 +86,13 @@ namespace Fugu
             throw new NotImplementedException();
         }
 
-        public ValueTask WriteAsync(WriteBatch batch)
+        public async ValueTask WriteAsync(WriteBatch batch)
         {
             // TODO: write batch instead of default
-            return _allocateWriteBatchChannel.Writer.WriteAsync(default);
+            var completionSource = new TaskCompletionSource();
+            var message = new AllocateWriteBatchMessage(batch, completionSource);
+            await _allocateWriteBatchChannel.Writer.WriteAsync(message);
+            await completionSource.Task;
         }
 
         public ValueTask DisposeAsync()

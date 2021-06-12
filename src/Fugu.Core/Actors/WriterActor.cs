@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using Fugu.Messages;
+using System.Buffers;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -10,11 +11,11 @@ namespace Fugu.Actors
     /// </summary>
     public class WriterActor
     {
-        private readonly ChannelReader<byte> _writeAllocatedBatchChannelReader;
+        private readonly ChannelReader<WriteAllocatedBatchMessage> _writeAllocatedBatchChannelReader;
         private readonly ChannelWriter<byte> _updateIndexChannelWriter;
 
         public WriterActor(
-            ChannelReader<byte> writeAllocatedBatchChannelReader,
+            ChannelReader<WriteAllocatedBatchMessage> writeAllocatedBatchChannelReader,
             ChannelWriter<byte> updateIndexChannelWriter)
         {
             _writeAllocatedBatchChannelReader = writeAllocatedBatchChannelReader;
@@ -30,6 +31,7 @@ namespace Fugu.Actors
             while (await _writeAllocatedBatchChannelReader.WaitToReadAsync())
             {
                 var message = await _writeAllocatedBatchChannelReader.ReadAsync();
+                message.CompletionSource.SetResult();
             }
         }
     }

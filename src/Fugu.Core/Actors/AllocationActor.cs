@@ -1,4 +1,5 @@
-﻿using System.Threading;
+﻿using Fugu.Messages;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -13,18 +14,20 @@ namespace Fugu.Actors
     {
         private readonly SemaphoreSlim _semaphore = new(1);
 
-        private readonly ChannelReader<byte> _allocateWriteBatchChannelReader;
+        private readonly ChannelReader<AllocateWriteBatchMessage> _allocateWriteBatchChannelReader;
         private readonly ChannelReader<byte> _segmentEvictedChannelReader;
-        private readonly ChannelWriter<byte> _writeWriteBatchChannelWriter;
+        private readonly ChannelWriter<WriteAllocatedBatchMessage> _writeAllocatedBatchChannelWriter;
+
+        private Segment? _segment = null;
 
         public AllocationActor(
-            ChannelReader<byte> allocateWriteBatchChannelReader,
+            ChannelReader<AllocateWriteBatchMessage> allocateWriteBatchChannelReader,
             ChannelReader<byte> segmentEvictedChannelReader,
-            ChannelWriter<byte> writeWriteBatchChannelWriter)
+            ChannelWriter<WriteAllocatedBatchMessage> writeAllocatedBatchChannelWriter)
         {
             _allocateWriteBatchChannelReader = allocateWriteBatchChannelReader;
             _segmentEvictedChannelReader = segmentEvictedChannelReader;
-            _writeWriteBatchChannelWriter = writeWriteBatchChannelWriter;
+            _writeAllocatedBatchChannelWriter = writeAllocatedBatchChannelWriter;
         }
 
         public Task ExecuteAsync()
@@ -39,7 +42,16 @@ namespace Fugu.Actors
             while (await _allocateWriteBatchChannelReader.WaitToReadAsync())
             {
                 await _semaphore.WaitAsync();
+
+                if (_segment == null)
+                {
+                    _segment = new Segment { Generation = 1 };
+                }
+                
                 var message = await _allocateWriteBatchChannelReader.ReadAsync();
+                await _writeAllocatedBatchChannelWriter.WriteAsync(
+                    new WriteAllocatedBatchMessage(message.Batch, _segment, message.CompletionSource));
+                
                 _semaphore.Release();
             }
         }
