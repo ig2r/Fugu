@@ -15,14 +15,12 @@ namespace BasicSample
                 ["Hello"] = Encoding.UTF8.GetBytes("World")
             };
 
-            batch.Remove("Foo");
-
             await store.WriteAsync(batch);
 
-            using (var snapshot = await store.GetSnapshotAsync())
-            {
+            //using (var snapshot = await store.GetSnapshotAsync())
+            //{
 
-            }
+            //}
         }
     }
 }
